@@ -10,26 +10,32 @@ Items marked **MISSING** represent gaps to address in the next iteration.
 
 | Step | Original (`ARCHITECTURE.md`) | C++ (`main.cpp`) | Status |
 |------|------------------------------|-----------------|--------|
-| FPU config | `_control87(0x20000, 0x30000)` | `_control87(0x20000, 0x30000)` | OK |
-| System params | Save + disable mouse accel | `SaveOrRestoreSystemParameters(false)` | OK |
-| Cmdline copy | strncpy to two 512-byte buffers | strncpy to `g_szCmdLine1/2` | OK |
-| COM/thread init | `thunk_FUN_00eb787a()` before single-instance check | Not present | **MISSING** |
-| Single instance | `FindWindowA` → TerminateProcess | `FindWindowA` → TerminateProcess | OK |
-| Window class | `RegisterWindowClass()` | `RegisterWindowClass()` | OK |
-| Registry load | `LoadGameSettings()` | `LoadGameSettings()` | OK |
-| Cmdline parse | `fullscreen`, `widescreen` | `ParseCommandLineArg` for both | OK |
-| Window creation | `CreateGameWindow(hInstance, width, height)` — **2 args, no x/y** | `CreateGameWindow(hInstance, x, y, width, height)` — **4 args** | SIGNATURE DIFFERS |
-| DirectX init | `thunk_FUN_00eb612e(height)` | TODO comment | **MISSING** |
-| Game subsystems | `thunk_FUN_00eb496e()` | TODO comment | **MISSING** |
-| Window placement | Restore after subsystem init | Restore after window create, before MainLoop | ORDER DIFFERS |
-| Main loop | `MainLoop()` | `MainLoop()` | OK |
-| Render teardown | `thunk_FUN_00ec6610()` | TODO comment | **MISSING** |
-| COM release | Release `DAT_00bef6d0` | TODO comment | **MISSING** |
-| Input cleanup | `UnacquireInputDevices()` | `UnacquireInputDevices()` | OK |
-| Param restore | `SaveOrRestoreSystemParameters(true)` | `SaveOrRestoreSystemParameters(true)` | OK |
-| Hard exit | `TerminateProcess(hProc, 1)` | `TerminateProcess(hProc, 1)` | OK |
-
-**Key issue**: COM/thread initialization (`thunk_FUN_00eb787a`) happens before the single-instance check in the original but is absent from the C++ code. `CreateGameWindow` signature has extra x/y parameters not present in the original's 2-arg form.
+| FPU config | `_control87(0x20000, 0x30000)` | Same | OK |
+| System params | `SaveOrRestoreSystemParameters(false)` | Same | OK |
+| Cmdline copy | strncpy to two 512-byte buffers | Same | OK |
+| CLI parser | `CLI_CommandParser_ParseArgs()` before single-instance check | TODO comment present, call absent | **MISSING** call |
+| Single instance | `FindWindowA` → TerminateProcess | Same | OK |
+| Window class | `RegisterWindowClass()` | Same | OK |
+| Registry load | `LoadGameSettings()` | Same | OK |
+| Cmdline parse | `fullscreen`, `widescreen` | Same | OK |
+| Window creation | `CreateGameWindow(hInstance, width, height)` | Same signature | OK |
+| Get client rect | `GetClientRect(hWnd, &rect)` for exact client height | `GetClientRect(ghWnd, &clientRect)` | OK |
+| Engine factory | Creates `DAT_00bef6d0` (2904-byte engine object) via callback manager factory | `g_pComObject` declared, never created | **MISSING** factory call |
+| PreDirectXInit | `PreDirectXInit()` | Called (empty stub) | OK (stub) |
+| DirectX init | `InitDirectXAndSubsystems(clientHeight)` | Called (empty stub) | OK (stub) |
+| Subsystems init | `InitGameSubsystems()` + `DAT_00bef6c6 = 1` | Called (empty stub) + `g_bSubsysInitialized = true` | OK (stub) |
+| Window restore | `ShowWindow(SW_MAXIMIZE/MINIMIZE/nShowCmd)` after init; then `UpdateWindow` | Same order | OK |
+| Main loop | `MainLoop()` | Same | OK |
+| Render teardown | `RenderAndAudioTeardown()` (`00ec6610`) | TODO comment | **MISSING** |
+| Engine obj release | `(**(callback_mgr + 0xc))(DAT_00bef6d0, 0)` via callback system | TODO comment, `g_pComObject = NULL` | **MISSING** |
+| Save options | `SaveOptionsOnExit()` (`00eb4a5d`) | Called (empty stub) | OK (stub) |
+| Input pause | Pause via RealInputSystem vtable | TODO comment | **MISSING** |
+| Unacquire | `UnacquireInputDevices()` | Same | OK |
+| Show cursor | Loop until ≥ 1 | Same | OK |
+| Focus flag | `DAT_00bef6c7 = 1` | `g_bHasFocusLost = true` | OK |
+| Cursor/scene | `UpdateCursorVisibilityAndScene()` | Called (empty stub) | OK (stub) |
+| Param restore | `SaveOrRestoreSystemParameters(true)` | Same | OK |
+| Hard exit | `TerminateProcess(hProc, 1)` | Same | OK |
 
 ---
 
@@ -38,9 +44,9 @@ Items marked **MISSING** represent gaps to address in the next iteration.
 | Aspect | Original | C++ | Status |
 |--------|----------|-----|--------|
 | HKCU → HKLM fallback | Yes | Yes | OK |
+| HKCU write-back on HKLM hit | Calls `FUN_0060cc70` to write value back to HKCU | Implemented inline | OK |
 | Auto-create in HKCU | Yes | Yes | OK |
-| `std::basic_string` internal use | Yes — uses C++ string objects internally | No — plain C strings | DIFFERS (implementation detail) |
-| HKCU write-back on HKLM hit | Original calls a helper (`FUN_0060cc70`) that creates the HKCU key | C++ returns value without HKCU write-back | **MISSING** |
+| `std::basic_string` internal use | Uses C++ string objects as parameters internally | Plain C strings | DIFFERS (implementation detail) |
 
 ---
 
@@ -49,10 +55,9 @@ Items marked **MISSING** represent gaps to address in the next iteration.
 | Aspect | Original | C++ | Status |
 |--------|----------|-----|--------|
 | Storage layout | `mouseSpeed[2]`, `mouseAccel[2]`, `screenReader[6]` | Same struct layout | OK |
-| Get calls | `SPI_GETMOUSESPEED (0x3a)`, `SPI_GETMOUSE (0x34)`, `SPI_GETSCREENREADER (0x32)` | Same codes via globals.h constants | OK |
-| Set calls | `SPI_SETMOUSESPEED (0x3b)`, `SPI_SETMOUSE (0x35)`, `SPI_SETSCREENREADER (0x33)` | Same | OK |
-| Bit check | bit 0 clear = acceleration active | bit 0 clear = acceleration active | OK |
-| Mask | `0xFFFFFFF3` clears bits 2–3 | `MOUSE_ACCEL_FLAGS_MASK = 0xFFFFFFF3` | OK |
+| SPI get/set codes | 0x3a/3b, 0x34/35, 0x32/33 | Same constants via globals.h | OK |
+| Bit check | bit 0 clear = acceleration active | Same | OK |
+| Mask | `0xFFFFFFF3` | `MOUSE_ACCEL_FLAGS_MASK = 0xFFFFFFF3` | OK |
 
 ---
 
@@ -60,15 +65,14 @@ Items marked **MISSING** represent gaps to address in the next iteration.
 
 | Aspect | Original | C++ | Status |
 |--------|----------|-----|--------|
-| Signature | `CreateGameWindow(hInstance, width, height)` | `CreateGameWindow(hInstance, x, y, width, height)` | EXTRA PARAMS |
-| Fullscreen style | `WS_POPUP` | `WS_POPUP` | OK |
-| Windowed style | `WS_OVERLAPPEDWINDOW` | `WS_OVERLAPPEDWINDOW` | OK |
-| TOPMOST | `HWND_TOPMOST` in fullscreen | `HWND_TOPMOST` in fullscreen | OK |
-| SetMenu | `SetMenu(hWnd, NULL)` in fullscreen | `SetMenu(hWnd, NULL)` | OK |
+| Signature | `CreateGameWindow(hInstance, width, height)` | Same | OK |
+| Fullscreen style | `WS_POPUP` | Same | OK |
+| Windowed style | `WS_OVERLAPPEDWINDOW` | Same | OK |
+| TOPMOST | `HWND_TOPMOST` in fullscreen | Same | OK |
+| SetMenu | `SetMenu(hWnd, NULL)` in fullscreen | Same | OK |
 | SetThreadExecutionState | `ES_CONTINUOUS \| ES_DISPLAY_REQUIRED` | Same | OK |
-| ShowWindow sequence | `ShowWindow(hWnd, 0)` then `SetWindowPos` | Same logic | OK |
-
-The original `CreateGameWindow` takes only `(hInstance, width, height)` — position comes from registry within the function. The C++ version takes x, y as parameters which is incorrect.
+| ShowWindow sequence | `ShowWindow(hWnd, 0)` then `SetWindowPos` | Same | OK |
+| Class style | Fullscreen: `CS_OWNDC \| CS_DBLCLKS`; windowed: adds `CS_VREDRAW \| CS_HREDRAW` | Always uses all four flags | MINOR DIFFERS |
 
 ---
 
@@ -77,12 +81,11 @@ The original `CreateGameWindow` takes only `(hInstance, width, height)` — posi
 | Message | Original | C++ | Status |
 |---------|----------|-----|--------|
 | `WM_DESTROY` | Show cursor + `PostQuitMessage(0)` | Same | OK |
-| `WM_SIZE/ERASEBKGND/ACTIVATEAPP` | Return 0 | Return 0 | OK |
-| `WM_ACTIVATE` focus-loss | PauseGraphicsState + UnacquireInputDevices + ... | UnacquireInputDevices + ... (PauseGraphicsState is TODO) | **MISSING** `PauseGraphicsState` |
-| `WM_ACTIVATE` focus-gain | Via `DAT_00e6b384+0xc` vtable for input acquire, then AcquireInputDevices | `AcquireInputDevices()` directly | MISSING vtable-based acquire |
-| `WM_ACTIVATE` focus-gain | Calls `thunk_FUN_00ea53ca()` (render pause) | Not present | **MISSING** |
-| `WM_SETFOCUS/SETCURSOR` | Calls `PauseGraphicsState()` on focus loss path | TODO comment | **MISSING** `PauseGraphicsState` |
-| `WM_SYSCOMMAND` | Blocks SC_MAXIMIZE/SIZE/MOVE/KEYMENU | Same | OK |
+| `WM_SIZE/ERASEBKGND/ACTIVATEAPP` | Return 0 | Same | OK |
+| `WM_ACTIVATE` focus-loss | `PauseGraphicsState()`, unacquire, show cursor, `g_bHasFocusLost=1`, **`UpdateCursorVisibilityAndScene(AL=1)`**, delayed timer | PauseGraphicsState stub, unacquire, show cursor, `g_bHasFocusLost=true`; UpdateCursorVisibilityAndScene is **TODO** | **MISSING** `UpdateCursorVisibilityAndScene` call |
+| `WM_ACTIVATE` focus-gain | RealInputSystem vtable acquire, `AcquireInputDevices`, show cursor, **`UpdateCursorVisibilityAndScene(AL=0)`**, `g_bHasFocusLost=0`, delay timer | TODO vtable acquire, `AcquireInputDevices`; UpdateCursorVisibilityAndScene is **TODO** | **MISSING** both calls |
+| `WM_SETFOCUS/SETCURSOR` | `PauseGraphicsState()` on focus-loss path | `PauseGraphicsState()` called (stub) | OK (stub) |
+| `WM_SYSCOMMAND` | Block SC_MAXIMIZE/SIZE/MOVE/KEYMENU | Same | OK |
 | `WM_NCHITTEST` | `HTCLIENT` fullscreen | Same | OK |
 | `WM_ENTERMENULOOP` | Return `0x10000` | Same | OK |
 | `WM_WTSSESSION_CHANGE` | wParam 0/7 → 1, else -1 | Same | OK |
@@ -94,16 +97,16 @@ The original `CreateGameWindow` takes only `(hInstance, width, height)` — posi
 
 | Aspect | Original | C++ | Status |
 |--------|----------|-----|--------|
-| Exit condition | `DAT_00bef6c5` flag or `WM_QUIT` | `g_bExitRequested` or `WM_QUIT` | OK |
-| Focus-loss cursor handling | Calls `SwitchRenderOutputMode` with scene IDs | Just cursor show/hide, no `SwitchRenderOutputMode` | **MISSING** |
-| Frame budget computation | Complex `ROUND((accumHigh * k1 + accumLow) * k2 * k3)` | Simple `timeGetTime()` elapsed | SIMPLIFIED |
+| Exit condition | `WM_QUIT` or exit flag | Same | OK |
+| Focus-loss cursor handling | `SwitchRenderOutputMode` with specific scene IDs from `DAT_00c82b00/08/ac` | `SwitchRenderOutputMode()` called but stub — no scene IDs passed | OK (stub) |
 | `GameFrameUpdate` | Called | Called | OK |
-| Memory allocator query | `QueryMemoryAllocatorMax()` tracks `g_nMinFreeMemory` | `g_nMinFreeMemory` declared but not updated | **MISSING** |
-| Delayed timer countdown | Subtracts from timer each frame | `timeGetTime()` delta subtracted | OK (approach differs) |
-| Resume audio on timer expiry | `thunk_FUN_00ec67e8()` | TODO comment | **MISSING** |
-| Resume game objects | `ResumeGameObjects()` | `ResumeGameObjects()` | OK |
-| Frame rate cap | `Sleep(0)` if under budget | `Sleep(0)` if under `TARGET_FRAME_TIME_MS` | OK |
-| WM_QUIT filter | filters `(UINT)-1` | filters `(UINT)-1` | OK |
+| Lazy `InitFrameCallbackSystem` | One-shot init guard before `QueryMemoryAllocatorMax` | Not present | **MISSING** |
+| Memory allocator query | `QueryMemoryAllocatorMax()` tracks `g_nMinFreeMemory` | Called, but stub returns 0 | OK (stub returns 0) |
+| Delayed timer countdown | Subtracts from timer each frame | `timeGetTime()` delta subtracted | OK |
+| Resume audio on expiry | `AudioStream_Resume()` (`00ec67e8`) | TODO comment | **MISSING** |
+| Resume game objects | `ResumeGameObjects()` | Same | OK |
+| Frame rate cap | `Sleep(0)` if under budget | Same | OK |
+| WM_QUIT filter | Filters `(UINT)-1` | Same | OK |
 
 ---
 
@@ -111,16 +114,14 @@ The original `CreateGameWindow` takes only `(hInstance, width, height)` — posi
 
 | Aspect | Original | C++ | Status |
 |--------|----------|-----|--------|
-| `GetGameTime` | `timeGetDevCaps` + `timeBeginPeriod` + `timeGetTime` + `timeEndPeriod` | Same | OK |
-| Startup baseline | `_DAT_00e6e5e8` | `g_dwStartupTime` | OK |
-| 16.16 fixed-point conversion | `high = t >> 16`, `low = t << 16` (separate 32-bit halves) | `tFixed = (ULONGLONG)tMs << 16` (single 64-bit) | IMPLEMENTATION DIFFERS |
-| Delta cap | `0x640000` (100ms in 16.16) | `(ULONGLONG)MAX_DELTA_TIME_MS << 16` | OK |
-| Game ticks formula | `accum * 3 / 0x10000` | `(g_ullAccumTime * 3) / TIME_FIXED_SHIFT` | OK |
-| Primary callback | `UpdateFrameTimingPrimary + (*DAT_008e1644[0])(&local_4)` | TODO comment | **MISSING** |
-| Secondary callback | `InterpolateFrameTime + (*DAT_008e1644[1])()` | TODO comment | **MISSING** |
+| `GetGameTime` implementation | `timeGetDevCaps + timeBeginPeriod + timeGetTime + timeEndPeriod` | Same | OK |
+| 16.16 fixed-point arithmetic | Two separate 32-bit halves (`DAT_00e6e5e0` low, `DAT_00e6e5e4` high) | Single `ULONGLONG` | FUNCTIONALLY EQUIVALENT |
+| Delta cap | `0x640000` (100ms in 16.16) | `MAX_DELTA_TIME_MS << 16` | OK |
+| Game ticks formula | `accum * 3 / 0x10000` | Same | OK |
+| Frame flip toggle | `DAT_00c83130 ^= 1` | `g_nFrameFlip ^= 1` | OK |
+| Primary callback | `UpdateFrameTimingPrimary()` + `(*DAT_008e1644[0])(&localTick)` | TODO comment | **MISSING** |
+| Secondary callback | `InterpolateFrameTime()` + `(*DAT_008e1644[1])()` | TODO comment | **MISSING** |
 | Timing double-buffer | `DAT_00c83170[flip*8]` stores tick/time | Not implemented | **MISSING** |
-
-The original uses **two separate 32-bit halves** for the 64-bit fixed-point value (`DAT_00e6e5e0` = low, `DAT_00e6e5e4` = high). The C++ uses a single `ULONGLONG`. This is functionally equivalent but differs structurally from the original.
 
 ---
 
@@ -128,17 +129,19 @@ The original uses **two separate 32-bit halves** for the 64-bit fixed-point valu
 
 | Aspect | Original | C++ | Status |
 |--------|----------|-----|--------|
-| `PreDeviceCheck()` before `TestCooperativeLevel` | Called | `GetAvailableTextureMem` inline (functional equivalent) | OK |
-| `TestCooperativeLevel` | vtable+0xc | Direct method call | OK |
+| `PreDeviceCheck` before `TestCooperativeLevel` | `PreDeviceCheck()` (`0067d2e0`) | `GetAvailableTextureMem` inline | OK (equivalent) |
 | Device lost sleep | 50ms | `DEVICE_LOST_SLEEP_MS (50)` | OK |
-| `D3DPRESENT_PARAMETERS` | Stored struct at `DAT_00b94af8` | Local struct created on demand | DIFFERS — original reuses saved params |
-| `ReleaseDirectXResources` pre-cleanup | `thunk_FUN_00ec04dc()` | Not present | **MISSING** |
-| `ReleaseDirectXResources` post-cleanup | `thunk_FUN_00ec19b5()` | Not present | **MISSING** |
-| `RestoreDirectXResources` first step | `InitRenderStates()` | TODO in comment | **MISSING** `InitRenderStates` |
-| GPU sync query | `CreateGPUSyncQuery()` if null | Not called in `RestoreDirectXResources` | **MISSING** |
-| AA sentinel | `0xbacb0ffe` | `D3D_AA_PATH_SENTINEL = 0xbacb0ffe` | OK |
-| `InitD3DStateDefaults` | Called at end of restore | TODO comment | **MISSING** |
-| `ReleaseDirectXResources` RT release | Gets back buffer from swap chain, calls `FUN_0067ecf0`, releases separately | Direct release of `g_pRenderTarget` | SIMPLIFIED |
+| `D3DPRESENT_PARAMETERS` | Saved struct `DAT_00b94af8`, reused for Reset | `g_d3dpp` global, updated before Reset | OK |
+| `ReleaseDirectXResources` pre-cleanup | `thunk_FUN_00ec04dc()` | TODO comment | **MISSING** |
+| `ReleaseDirectXResources` post-cleanup | `thunk_FUN_00ec19b5()` | TODO comment | **MISSING** |
+| `RestoreDirectXResources` render states | `InitRenderStates()` | Called (empty stub) | OK (stub) |
+| `RestoreDirectXResources` GPU sync | `CreateGPUSyncQuery()` if null | Called conditionally (stub) | OK (stub) |
+| `RestoreDirectXResources` empty stub | `FUN_0067bb20()` (confirmed empty) | Not called | OK (no-op) |
+| `RestoreDirectXResources` AA sentinel | `0xbacb0ffe` | `D3D_AA_PATH_SENTINEL = 0xbacb0ffe` | OK |
+| `RestoreDirectXResources` hw cap check | Checks `TextureOpCaps & 0x80` before texture RT create | Not checked (always creates) | MINOR DIFFERS |
+| `InitD3DStateDefaults` | Called at end of restore | Called (empty stub) | OK (stub) |
+| `ReleaseDirectXResources` RT release | Gets back buffer from swap chain + `SetCachedRenderTargets` | Direct null-check release of `g_pRenderTarget` | SIMPLIFIED |
+| `FatalError` on bad `TestCooperativeLevel` | Calls `FatalError(...)` — does not return | Comment noting this | **MISSING** |
 
 ---
 
@@ -146,10 +149,10 @@ The original uses **two separate 32-bit halves** for the 64-bit fixed-point valu
 
 | Aspect | Original | C++ | Status |
 |--------|----------|-----|--------|
-| `AcquireInputDevices` | Also calls `Ordinal_5(0)` (custom hide cursor) | `ShowCursor(FALSE)` only | MINOR DIFFERS |
-| `UnacquireInputDevices` | Also calls `Ordinal_5(1)` | `ShowCursor(TRUE)` only | MINOR DIFFERS |
-| Fatal error on failure | `FUN_0066f810` called on acquire failure | No error checking | **MISSING** |
-| DirectInput init | `FUN_00688370(4, 0)` in `InitGameSubsystems` | Not implemented | **MISSING** |
+| Acquire cursor control | `Ordinal_5(0)` — custom cursor hide | `ShowCursor(FALSE)` | MINOR DIFFERS |
+| Unacquire cursor control | `Ordinal_5(1)` — custom cursor show | `ShowCursor(TRUE)` | MINOR DIFFERS |
+| Fatal error on failure | `FUN_0066f810` on acquire failure | No error checking | **MISSING** |
+| DirectInput enumeration | `FUN_00688370(4, 0)` in `InitGameSubsystems` | Not implemented | **MISSING** (in stub) |
 
 ---
 
@@ -157,11 +160,11 @@ The original uses **two separate 32-bit halves** for the 64-bit fixed-point valu
 
 | Aspect | Original | C++ | Status |
 |--------|----------|-----|--------|
-| Full pause | Triggers animation, calls vtable+0x24 on all systems, records pause time | State machine stub only | **MISSING** vtable calls |
-| Audio-only pause | Pauses `DAT_00c7c370` via vtable | State machine stub only | **MISSING** |
-| Full resume | Triggers animation, calls vtable+0x28 on all systems, records resume time | State machine stub only | **MISSING** vtable calls |
-| `PauseAudioManager` | Checks music loaded, calls `FUN_006a9ea0` | Empty stub | **MISSING** |
-| `ProcessDeferredCallbacks` | Processes linked list at `DAT_00bef7c0` within 2ms budget | Empty stub | **MISSING** |
+| Full pause | Triggers animation, vtable+0x24 on all systems, records pause time | State machine skeleton without vtable calls | **MISSING** |
+| Audio-only pause | Pauses systems via vtable | State machine skeleton | **MISSING** |
+| Full resume | Triggers animation, vtable+0x28 on all systems | State machine skeleton | **MISSING** |
+| `PauseAudioManager` | Checks music, calls `FUN_006a9ea0` | Empty stub | **MISSING** |
+| `ProcessDeferredCallbacks` | Processes linked list at `DAT_00bef7c0` within 2ms | Empty stub | **MISSING** |
 
 ---
 
@@ -179,35 +182,33 @@ The original uses **two separate 32-bit halves** for the 64-bit fixed-point valu
 | `DAT_00bef6d5` | `g_bUpdatesWerePaused` | OK |
 | `DAT_00bf18aa` | `g_bDeviceLost` | OK |
 | `DAT_00c7b908` | `g_nPauseState` | OK |
-| `DAT_008afb08` | `g_nMinFreeMemory` | declared, **not updated** |
-| `DAT_00e6b384` | not present | **MISSING** |
-| `DAT_00bef6d0` | not present | **MISSING** |
+| `DAT_008afb08` | `g_nMinFreeMemory` | OK (stub returns 0, so never updates) |
 | `DAT_00bef6c5` | `g_bExitRequested` | OK |
+| `DAT_00bef6c6` | `g_bSubsysInitialized` | OK |
+| `DAT_00bef6d0` | `g_pComObject` (declared, never created) | **MISSING** factory |
+| `DAT_00e6b384` | RealInputSystem — not exposed as a global | **MISSING** |
+| `DAT_00b94af8` | `g_d3dpp` | OK |
 
 ---
 
 ## Summary: Priority Fixes for Next Iteration
 
 **High priority (functional correctness):**
-1. Add `thunk_FUN_00eb787a()` (COM/thread init) stub before single-instance check in WinMain
-2. Add `InitDirectXAndSubsystems(height)` and `InitGameSubsystems()` stub calls in WinMain
-3. Fix `CreateGameWindow` signature: remove `x, y` params; read position from registry inside the function
-4. Add `PauseGraphicsState()` TODO stubs in `WM_ACTIVATE` focus-loss and `WM_SETFOCUS`
-5. Add `thunk_FUN_00ea53ca()` (render pause) stub to `WM_ACTIVATE` both paths
-6. Add HKCU write-back when key found in HKLM (`ReadRegistrySetting`)
-7. Add `InitRenderStates()`, `CreateGPUSyncQuery()`, `InitD3DStateDefaults()` stub calls in `RestoreDirectXResources`
-8. Add `thunk_FUN_00ec04dc()` and `thunk_FUN_00ec19b5()` pre/post cleanup stubs in `ReleaseDirectXResources`
-9. Add frame callback dispatch stubs in `GameFrameUpdate` (primary + secondary)
-10. Add `SwitchRenderOutputMode` stub call in the focus-loss path of `MainLoop`
-11. Update `g_nMinFreeMemory` via `QueryMemoryAllocatorMax()` stub call in `MainLoop`
-12. Add `thunk_FUN_00ec67e8()` (resume audio) stub call on timer expiry in `MainLoop`
+1. Add `CLI_CommandParser_ParseArgs()` stub call before single-instance check in WinMain
+2. Add `UpdateCursorVisibilityAndScene()` call in `WM_ACTIVATE` focus-loss path (with cursor-visible=true)
+3. Add `UpdateCursorVisibilityAndScene()` call in `WM_ACTIVATE` focus-gain path (with cursor-visible=false)
+4. Add TODO for RealInputSystem vtable input re-acquire in `WM_ACTIVATE` focus-gain path
+5. Add `AudioStream_Resume()` stub call on delayed-timer expiry in `MainLoop`
+6. Add primary callback TODO in `GameFrameUpdate` (`UpdateFrameTimingPrimary + (*DAT_008e1644[0])`)
+7. Add secondary callback TODO in `GameFrameUpdate` (`InterpolateFrameTime + (*DAT_008e1644[1])`)
 
 **Medium priority (structural fidelity):**
-13. Add persistent `D3DPRESENT_PARAMETERS g_d3dpp` global (matching `DAT_00b94af8`)
-14. Add `g_pComObject` (IUnknown*) for `DAT_00bef6d0` — created in WinMain, released at exit
-15. Add vtable-based input acquire via game state object in focus-gain path of `WM_ACTIVATE`
-16. Move window placement restore to after `InitDirectXAndSubsystems` call (matching original order)
+8. Add engine object factory TODO in WinMain (before `PreDirectXInit`): creates `g_pComObject`
+9. Add missing `thunk_FUN_00ec04dc()` and `thunk_FUN_00ec19b5()` TODO stubs in DX resource management
+10. Fix `RegisterWindowClass`: apply `CS_OWNDC | CS_DBLCLKS` only in fullscreen; add `CS_VREDRAW | CS_HREDRAW` in windowed mode
+11. Implement `SaveOptionsOnExit`: write OptionResolution/LOD/Brightness to registry
 
 **Low priority (implementation details):**
-17. `AcquireInputDevices`/`UnacquireInputDevices`: add `Ordinal_5` custom cursor call stubs
-18. Add error checking in `AcquireInputDevices` (fatal error on failure)
+12. `AcquireInputDevices`/`UnacquireInputDevices`: note `Ordinal_5` stub difference
+13. Add error checking in `AcquireInputDevices` (fatal error on failure)
+14. `RestoreDirectXResources`: add hardware capability check (`TextureOpCaps & 0x80`) before texture RT path
