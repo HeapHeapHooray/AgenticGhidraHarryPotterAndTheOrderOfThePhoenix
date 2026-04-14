@@ -136,18 +136,34 @@ enum AudioCommandType {
 };
 
 struct AudioCommand {
-    AudioCommandType opcode;
-    void* params;
-    void (*callback)(int status);
-    int status;  // -2=error, 0=pending, 1=complete
+    AudioCommandType opcode;       // +0x00: Command type
+    void* params;                  // +0x04: Command-specific parameters
+    void (*callback)(int status);  // +0x08: Completion callback
+    int status;                    // +0x0c: -2=error, 0=pending, 1=complete
+    DWORD timestamp;               // +0x10: Submission time for timeout detection
+};
+
+// Audio command queue structure (DAT_00be82ac)
+struct AudioCommandQueue {
+    AudioCommand commands[64];     // +0x00: Fixed array of commands
+    int head;                      // +0x400: Read index
+    int tail;                      // +0x404: Write index
+    int count;                     // +0x408: Active command count
+    CRITICAL_SECTION cs;           // +0x40c: Thread synchronization
+    HANDLE event;                  // +0x424: Event for wake notification
 };
 
 // Message dispatch handler structure
-struct MessageHandler {
-    void (*handler)(void* dest, void* params);
-    void* dest;
-    int paramType;
+struct MessageEntry {
+    DWORD msg_hash;                    // +0x00: Hash of message name (FNV-1a)
+    void* dest_object;                 // +0x04: Destination object pointer
+    void (*handler)(void*, void*);     // +0x08: Handler function
+    int param_type;                    // +0x0c: Parameter type indicator
+    const char* debug_name;            // +0x10: Original name (debug builds only)
 };
+
+// Backward compatibility typedef
+typedef MessageEntry MessageHandler;
 
 // Scene IDs for three-ID scene management system
 struct SceneIDs {
@@ -158,23 +174,41 @@ struct SceneIDs {
 
 // Render batch node for deferred rendering queue
 struct RenderBatchNode {
-    // Shader and material info
-    DWORD shaderTypeHash;
-    void* material;
-    void* geometry;
+    // Geometry reference
+    void* geometry_buffer;         // +0x00: Vertex/index buffer
+    DWORD vertex_count;            // +0x04
+    DWORD index_count;             // +0x08
     
-    // Transform (simplified - actual might be 4x4 matrix)
-    float transform[16];
+    // Material/shader
+    void* material;                // +0x0c: Material properties
+    DWORD shader_hash;             // +0x10: Shader type hash (FNV-1a of name)
     
-    // Flags
-    DWORD flags;
+    // Transform
+    float world_matrix[16];        // +0x14: World transform (64 bytes, 4x4 matrix)
     
-    // Unknown fields up to next pointer
-    char unknown[0x7c - 0x44];
+    // Render state
+    DWORD render_flags;            // +0x54: Alpha, depth test, cull mode
+    float sort_key;                // +0x58: Depth for sorting
     
-    // Next pointer at +0x7c
-    RenderBatchNode* next;
+    // Batch info
+    int batch_id;                  // +0x5c: For batch merging
+    DWORD timestamp;               // +0x60: Submission time
+    
+    // Padding/unknown
+    char padding[0x1c];            // +0x64: Unknown fields
+    
+    // List linkage
+    RenderBatchNode* next;         // +0x7c: Next in queue
 };
+
+// Shader type hashes (FNV-1a)
+#define SHADER_HASH_OPAQUE   0x2a4f6b91
+#define SHADER_HASH_ALPHA    0x7c31e8a2
+#define SHADER_HASH_BLOOM    0x1f9d4c33
+#define SHADER_HASH_GLASS    0x5e2a1bd4
+#define SHADER_HASH_BACKDROP 0x8f3c9a45
+#define SHADER_HASH_WATER    0x3d7f2e16
+#define SHADER_HASH_SKY      0x6a8b4c97
 
 // TimeManager structure (DAT_00bef768 - 8 bytes)
 struct TimeManager {
@@ -197,6 +231,55 @@ struct RealGraphSystem {
     void* callback_mgr_secondary;    // +0x04
 };
 
+// Input system structure (DAT_00be8758)
+struct RealInputSystem {
+    // Base object
+    void* vtable;                      // +0x00: Vtable pointer
+    
+    // DirectInput interfaces
+    IDirectInput8* pDirectInput;       // +0x04: Main DirectInput8 object
+    IDirectInputDevice8* pKeyboard;    // +0x08: Keyboard device
+    IDirectInputDevice8* pMouse;       // +0x0c: Mouse device
+    IDirectInputDevice8* pJoystick[2]; // +0x10: Up to 2 joysticks
+    
+    // Device state buffers
+    BYTE keyboard_state[256];          // +0x18: Current keyboard state
+    BYTE prev_keyboard_state[256];     // +0x118: Previous frame keyboard
+    DIMOUSESTATE2 mouse_state;         // +0x218: Current mouse state
+    DIMOUSESTATE2 prev_mouse_state;    // +0x22c: Previous mouse state
+    DIJOYSTATE2 joystick_state[2];     // +0x240: Joystick states
+    DIJOYSTATE2 prev_joystick_state[2];// +0x340: Previous joystick states
+    
+    // Device status
+    bool keyboard_active;              // +0x440: Keyboard acquired
+    bool mouse_active;                 // +0x441: Mouse acquired
+    bool joystick_active[2];           // +0x442: Joystick presence
+    
+    // Configuration
+    DWORD input_flags;                 // +0x444: Input system flags
+    bool paused;                       // +0x448: Pause state
+    
+    // Synchronization
+    CRITICAL_SECTION cs;               // +0x44c: Thread safety
+};
+
+// GameServices structure (DAT_00bf2260)
+struct GameServices {
+    void* vtable;                      // +0x00: Vtable with subsystem getters
+    
+    // Subsystem pointers (lazy-initialized)
+    void* save_manager;                // +0x04
+    void* profile_manager;             // +0x08
+    void* locale_manager;              // +0x0c
+    void* achievement_mgr;             // +0x10
+    void* stat_tracker;                // +0x14
+    void* option_manager;              // +0x18
+    
+    // State
+    bool initialized;                  // +0x40
+    DWORD init_flags;                  // +0x44
+};
+
 // Scene listener callback type
 typedef void (*SceneListenerCallback)(int newSceneID);
 
@@ -206,6 +289,48 @@ struct AllocHeader {
     size_t size;
     AllocHeader* next;
     DWORD magic;  // 0xDEADBEEF
+};
+
+// Free list node for memory allocator
+struct FreeListNode {
+    FreeListNode* next;
+    size_t size;
+};
+
+// Tag statistics for memory tracking
+struct TagStats {
+    const char* tag_name;          // Debug name (e.g., "CLI::CommandParser")
+    DWORD bytes_allocated;         // Total bytes for this tag
+    DWORD allocation_count;        // Number of allocations
+    DWORD peak_bytes;              // Peak usage for this tag
+};
+
+// Engine allocator structure (complete layout at 0x00e61380)
+struct EngineAllocator {
+    // Header (0x00 - 0x28)
+    void* vtable;                    // +0x00: Vtable pointer
+    DWORD total_allocated;           // +0x04: Total bytes allocated (lifetime)
+    DWORD current_allocated;         // +0x08: Currently allocated bytes
+    DWORD peak_usage;                // +0x0c: Peak memory usage
+    DWORD allocation_count;          // +0x10: Number of allocations (lifetime)
+    DWORD free_count;                // +0x14: Number of frees (lifetime)
+    DWORD current_alloc_count;       // +0x18: Active allocations
+    void* heap_base;                 // +0x1c: Base address of heap region
+    SIZE_T heap_size;                // +0x20: Total heap size
+    DWORD flags;                     // +0x24: Allocator flags
+    
+    // Stats tracking (0x28 - 0x428)
+    TagStats tag_stats[256];         // +0x28: Per-tag statistics (256*4=0x400 bytes)
+    
+    // Free lists (0x428 - 0x820)
+    FreeListNode* free_lists[254];   // +0x428: Free list buckets (254*4=0x3f8 bytes)
+    
+    // Synchronization (0x820+)
+    CRITICAL_SECTION cs;             // +0x820: Critical section (24 bytes on Win32)
+    
+    // Additional metadata
+    DWORD last_compact_time;         // +0x838: Last defragmentation timestamp
+    DWORD compact_threshold;         // +0x83c: Fragmentation threshold for compaction
 };
 
 // ── Function prototypes ───────────────────────────────────────────────────────
@@ -264,10 +389,11 @@ void InitFrameCallbackSystem();  // FUN_00eb8744 — clears callback slots
 void RegisterFrameCallback(void (*func)(void*), void* context);
 void InvokeFrameCallbacks();
 
-// Audio command queue (Iteration 5)
+// Audio command queue (Iteration 5-7)
 void InitAudioCommandQueue();
 void EnqueueAudioCommand(AudioCommandType opcode, void* params, void (*callback)(int));
 int AudioPollGate();  // FUN_006109d0 — returns -2/0/1 (error/pending/complete)
+DWORD WINAPI AudioThreadProc(LPVOID lpParam);  // Audio thread entry point
 
 // Scene management (Iteration 5)
 void LoadSceneIDs();

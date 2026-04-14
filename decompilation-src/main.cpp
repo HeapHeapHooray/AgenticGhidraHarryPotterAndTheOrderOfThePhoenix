@@ -802,12 +802,12 @@ void RegisterMessageHandler(void* dest, const char* msgName, int paramType) {
     DWORD msgID = HashMessageName(msgName);
     
     // Store in dispatch table (simple linear array for now)
-    MessageHandler* handler = &g_MessageDispatchTable[g_nMessageHandlerCount++];
-    handler->handler = NULL;  // TODO: Set actual handler function
-    handler->dest = dest;
-    handler->paramType = paramType;
-    
-    // TODO: Store msgID mapping
+    MessageEntry* entry = &g_MessageDispatchTable[g_nMessageHandlerCount++];
+    entry->msg_hash = msgID;
+    entry->dest_object = dest;
+    entry->handler = NULL;  // TODO: Set actual handler function
+    entry->param_type = paramType;
+    entry->debug_name = msgName;
 }
 
 void DispatchMessage(DWORD msgID, void* params) {
