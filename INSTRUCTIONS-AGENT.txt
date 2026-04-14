@@ -15,4 +15,5 @@ The current directory is a git repository, you are supposed to go through the fo
 8. Analyze how CPP-ARCHITECTURE.md and ARCHITECTURE.md are different, and note the differences in DIFFERENCES.md (DIFFERENCES.md needs to always be cleaned/erased before noting !), remember, full decompilation means you will have a functionally equivalent code at the end.
 9. Modify the C++ code with DIFFERENCES.md in mind, trying to get a closer representation of the original program. Do it till you think it's good enough to repeat the whole process again.
 10. Make sure all the research written into ARCHITECTURE.md is also commented in Ghidra, both by actual comments and variable/function renaming.
-11. Repeat step 1 through 10.
+11. Update README.md with how much of the disassembly has already been annotated... functions count, architectural coverage, everything...
+12. Repeat step 1 through 11.
