@@ -117,6 +117,8 @@ void LoadGameSettings() {
 }
 
 void SaveWindowPlacement(HWND hWnd) {
+    const char* appName = "Harry Potter and the Order of the Phoenix";
+    const char* section = "GameSettings";
     WINDOWPLACEMENT wp = {sizeof(WINDOWPLACEMENT)};
 
     if (!GetWindowPlacement(hWnd, &wp)) {
@@ -134,19 +136,17 @@ void SaveWindowPlacement(HWND hWnd) {
         wp.rcNormalPosition.right += adjustRect.right;
 
         char buffer[32];
-        const char* appName = "Harry Potter and the Order of the Phoenix";
-        const char* section = "GameSettings";
 
-        sprintf(buffer, "%d", wp.rcNormalPosition.left);
+        sprintf(buffer, "%ld", wp.rcNormalPosition.left);
         WriteRegistrySetting(appName, section, "PosX", buffer);
 
-        sprintf(buffer, "%d", wp.rcNormalPosition.top);
+        sprintf(buffer, "%ld", wp.rcNormalPosition.top);
         WriteRegistrySetting(appName, section, "PosY", buffer);
 
-        sprintf(buffer, "%d", wp.rcNormalPosition.right - wp.rcNormalPosition.left);
+        sprintf(buffer, "%ld", wp.rcNormalPosition.right - wp.rcNormalPosition.left);
         WriteRegistrySetting(appName, section, "SizeX", buffer);
 
-        sprintf(buffer, "%d", wp.rcNormalPosition.bottom - wp.rcNormalPosition.top);
+        sprintf(buffer, "%ld", wp.rcNormalPosition.bottom - wp.rcNormalPosition.top);
         WriteRegistrySetting(appName, section, "SizeY", buffer);
     }
 
