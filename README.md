@@ -30,6 +30,7 @@
 
 ### Annotated Functions/Structures
 - **Functions:** 50+ major functions documented
+- **Function Coverage:** 1.65% (205/12,392 total functions annotated)
 - **Globals:** 100+ global variables identified
 - **Structures:** 30+ data structures defined
 - **Subsystems:** 13 major subsystems documented
