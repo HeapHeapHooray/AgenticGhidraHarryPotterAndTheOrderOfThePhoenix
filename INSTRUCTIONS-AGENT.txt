@@ -1,7 +1,7 @@
 This is a project to decompiled the PC video game "Harry Potter and The Order of the Phoenix", the program is "hp.exe", a Ghidra project for it sits in this same folder.
 
 
-NOTE: temporary files go into the ./workspace folder, Ghidra scripts go in ./scripts.
+NOTE: temporary files go into the ./workspace folder, always delete temporary files after using them. Ghidra scripts go in ./scripts.
 
 The current directory is a git repository, you are supposed to go through the following steps, making a commit after each one:
 

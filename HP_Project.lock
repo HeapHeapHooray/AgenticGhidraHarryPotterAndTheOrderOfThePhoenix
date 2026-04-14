@@ -1,9 +1,0 @@
-#Ghidra Lock File
-#Tue Apr 14 10:30:35 BRT 2026
-<META>\ Supports\ File\ Channel\ Locking=Channel Lock
-Hostname=neondragon
-OS\ Architecture=amd64
-OS\ Name=Linux
-OS\ Version=6.17.0-14-generic
-Timestamp=4/14/26, 10\:30\u202FAM
-Username=heap
