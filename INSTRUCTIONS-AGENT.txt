@@ -5,7 +5,7 @@ NOTE: temporary files go into the ./workspace folder, always delete temporary fi
 
 The current directory is a git repository, you are supposed to go through the following steps, making a commit after each one:
 
-1. Read all the comments in the Ghidra disassembly and review the disassembly for documentation gaps, commenting as necessary, making sure the comments you add fully reflect the functionality of the code. If new comments aren't needed, don't add them. If needed, look at the compiled ".exe" for more information. Also, always rename function names, variables and globals when possible, so it's clear.
+1. Read all the comments in the Ghidra disassembly and review the disassembly for documentation gaps, commenting as necessary, making sure the comments you add fully reflect the functionality of the code. If new comments aren't needed, don't add them. If needed, look at the original "hp.exe" for more information. Also, always rename function names, variables and globals when possible, so it's clear.
 2. Describe the architecture of how the program being decompiled works, here in ARCHITECTURE.md.
 3. Ask questions about ARCHITECTURE.md in QUESTIONS.md
 4. Repeat 1-3 with QUESTIONS.md in mind, QUESTIONS.md leads to re-exploring the disassembly discovering more about the code, documenting more by filling the gaps and making a more detailed ARCHITECTURE.md. Do it till you think it's good enough to a new phase of C++ code writing (there will be multiple of them through the process of decompilation).
@@ -14,4 +14,5 @@ The current directory is a git repository, you are supposed to go through the fo
 7. Analyze the C++ code you wrote and describe the architecture of how the C++ code works in CPP-ARCHITECTURE.md (CPP-ARCHITECTURE.md needs to be cleaned/erased before you start describing !).
 8. Analyze how CPP-ARCHITECTURE.md and ARCHITECTURE.md are different, and note the differences in DIFFERENCES.md (DIFFERENCES.md needs to always be cleaned/erased before noting !), remember, full decompilation means you will have a functionally equivalent code at the end.
 9. Modify the C++ code with DIFFERENCES.md in mind, trying to get a closer representation of the original program. Do it till you think it's good enough to repeat the whole process again.
-10. Repeat step 1 through 9.
+10. Make sure all the research written into ARCHITECTURE.md is also commented in Ghidra, both by actual comments and variable/function renaming.
+11. Repeat step 1 through 10.

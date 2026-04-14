@@ -1,7 +1,7 @@
 # Architecture of hp.exe
 
 ## Overview
-`hp.exe` is the main executable for "Harry Potter and the Order of the Phoenix". It is a Windows PE application built with Visual Studio 2005 using DirectX 9 for rendering and DirectInput 8 for input.
+`hp.exe` is the main executable for "Harry Potter and the Order of the Phoenix". It is a Windows PE application built with Visual Studio 2005 using DirectX 9 for rendering and DirectInput 8 for input. It uses a custom engine with message-based subsystem communication and a cooperative-multitasking deferred callback queue.
 
 ## Entry Point
 The program starts at `___tmainCRTStartup` (`006f54d2`), the standard CRT entry for a Windows app, which calls `WinMain`.
@@ -10,24 +10,39 @@ The program starts at `___tmainCRTStartup` (`006f54d2`), the standard CRT entry 
 Core entry point for all game logic. Initialization order:
 
 1. **FPU Configuration**: `_control87(0x20000, 0x30000)` — prevents denormal floating-point exceptions
-2. **System Parameters**: Saves current Windows parameters (`SPI_GETMOUSESPEED`, `SPI_GETMOUSE`, `SPI_GETSCREENREADER`) into globals `DAT_008afc44`, `DAT_008afc4c`, `DAT_008afc54`, then calls `UpdateSystemParameters(0)` to disable mouse acceleration
-3. **Command Line Storage**: `strncpy` of `lpCmdLine` into `DAT_00c82b88` (0x1ff bytes) and `DAT_00c82d88` (0x1ff bytes)
-4. **COM/Thread Init**: `thunk_FUN_00eb787a()` — likely CoInitialize or thread pool setup
+2. **System Parameters**: Saves current Windows parameters via `SystemParametersInfoA` into globals `DAT_008afc44` (mouseSpeed[2]), `DAT_008afc4c` (mouseAccel[2]), `DAT_008afc54` (screenReader[6]), then calls `UpdateSystemParameters(0)` to disable mouse acceleration
+3. **Command Line Storage**: `strncpy` of `lpCmdLine` into `DAT_00c82b88` (0x1ff bytes) and `DAT_00c82d88` (0x1ff bytes); `DAT_00c82d87 = 0` (null-terminates the second copy)
+4. **CLI Argument Parsing**: `CLI_CommandParser_ParseArgs()` (`00eb787a`) — parses additional `-name=value` command-line tokens into a CLI::CommandParser object. **NOT COM init** (previously misidentified).
 5. **Single Instance Check**: `FindWindowA("OrderOfThePhoenixMainWndClass", NULL)` — if found, calls `TerminateProcess(GetCurrentProcess(), 0)`
 6. **Window Class Registration**: `RegisterWindowClass()` (`00eb4b95`)
-7. **Registry Settings Load**: Reads all game settings (see section below)
-8. **Command Line Parsing**: `ParseCommandLineArg` checks for `fullscreen` and `widescreen` flags
-9. **Window Creation**: `CreateGameWindow(hInstance, width, height)` → stored in `DAT_00bef6cc`
-10. **Subsystem Init**: `thunk_FUN_00eb5c3e()`, `thunk_FUN_00eb612e()`, `thunk_FUN_00eb496e()` — likely DirectX + DirectInput initialization
-11. **Window Placement Restore**: In windowed mode, reads `Maximized`/`Minimized`/placement from registry and calls `ShowWindow` accordingly
-12. **Main Loop**: `MainLoop()` (`0060dc10`)
-13. **Cleanup**: `thunk_FUN_00ec6610()` (render teardown), `UnacquireInputDevices()`, `UpdateSystemParameters(1)`, `TerminateProcess` (hard exit)
+7. **Registry Settings Load**: Reads all game settings using `std::basic_string<char>` wrapper objects (see section below). The original ReadRegistrySetting takes `std::basic_string` params internally.
+8. **Command Line Parsing**: `ParseCommandLineArg` (`00617bf0`) checks for `fullscreen` and `widescreen` flags
+9. **Window Creation**: `CreateGameWindow(hInstance, width, height)` → stored in `DAT_00bef6cc`; then `GetClientRect(DAT_00bef6cc, &rect)` to get exact client height
+10. **Engine Object Factory**: `GetOrInitCallbackManager()` → calls factory via callback system's secondary entry vtable with size=0xb58 (2904 bytes) and magic `{0x88332000000001, 0}` → result stored in `DAT_00bef6d0` (a large engine sub-object)
+11. **Pre-DirectX Init**: `PreDirectXInit()` (`00ec64f9`) — sets `DAT_00bf1b18 = DAT_00bef6d0` (passes engine object to render/audio system), zeros audio flag `DAT_00bf1b10`, copies audio device string to `DAT_00be93d0`, calls `FUN_006ac0b0` + `thunk_FUN_00ec6e91` (audio subsystem setup), creates audio output context `DAT_00bf1b1c` via `thunk_FUN_00ec72a9()`
+12. **DirectX Init**: `InitDirectXAndSubsystems(clientHeight)` (`00eb612e`) — creates D3D device, input, audio subsystems
+13. **Game Subsystems Init**: `InitGameSubsystems()` (`00eb496e`) — registers callbacks, enumerates input devices, loads language screen; sets `DAT_00bef6c6 = 1`
+14. **Window Placement Restore**: In windowed mode, reads `Maximized`/`Minimized` as `std::basic_string` and calls `ShowWindow` (SW_MAXIMIZE=3, SW_MINIMIZE=6, else nShowCmd); then `UpdateWindow(hWnd)`
+15. **Main Loop**: `MainLoop()` (`0060dc10`)
+16. **Cleanup**:
+    - `RenderAndAudioTeardown()` (`00ec6610`) — releases audio/render resources
+    - Release `DAT_00bef6d0` via `(**(callback_mgr + 0xc))(DAT_00bef6d0, 0)` (NOT simple COM release)
+    - `SaveOptionsOnExit()` (`00eb4a5d`) — writes OptionResolution, OptionLOD, OptionBrightness back to registry via `FUN_0060cc70` (WriteRegistrySetting integer helper)
+    - Pause input device via RealInputSystem vtable (mirrors PauseGraphicsState logic)
+    - `UnacquireInputDevices()` + show cursor loop
+    - `DAT_00bef6c7 = 1`; `UpdateCursorVisibilityAndScene()` (`00ea53ca`)
+    - `UpdateSystemParameters(1)` to restore system params
+    - `TerminateProcess(GetCurrentProcess(), 1)` — hard exit (avoids CRT teardown)
 
 On initialization failure: `TerminateProcess(GetCurrentProcess(), 0)`.
 
-## Registry Settings (`0060ce60` for int, `0060ca20` for string)
+## CLI Command Parser (`CLI_CommandParser_ParseArgs` `00eb787a`)
+Parses `-name=value` tokens from `DAT_00c82b88` (command line copy) into an in-memory CLI::CommandParser object (allocated with tag "CLI::CommandParser", size 0xc bytes, at `DAT_00e6b328`). Stores name pointers at `this+0x480` (up to 0x20 entries) and value pointers at `this+0x500`. Positional arguments stored at `this+0x400`. Called before single-instance check.
 
-All settings under `HKEY_CURRENT_USER\Software\Electronic Arts\Harry Potter and the Order of the Phoenix\GameSettings`:
+## Registry Settings
+All settings read via `ReadRegistrySetting` / `ReadRegistrySettingStr` which use `std::basic_string<char>` wrapper objects as parameters internally. Key read (via `FUN_0060ce60` for int, `FUN_0060ca20` for string).
+
+All under `HKEY_CURRENT_USER\Software\Electronic Arts\Harry Potter and the Order of the Phoenix\GameSettings`:
 
 ### Graphics Settings
 | Key | Address | Default | Notes |
@@ -59,17 +74,21 @@ All settings under `HKEY_CURRENT_USER\Software\Electronic Arts\Harry Potter and 
 | `PosY` | `"32"` | Window Y position |
 | `SizeX` | `"640"` | Window width |
 | `SizeY` | `"480"` | Window height |
-| `Maximized` | `"false"` | Whether window is maximized |
-| `Minimized` | `"false"` | Whether window is minimized |
+| `Maximized` | `"false"` | Restored via SW_MAXIMIZE (3) on startup |
+| `Minimized` | `"false"` | Restored via SW_MINIMIZE (6) on startup |
 
 ### Fallback
-- Reads HKCU first, then HKLM. If key is not found anywhere, creates it in HKCU with the default value.
-- `ReadRegistrySetting` uses `std::basic_string` internally. Throws C++ exception if section name is empty.
+- Reads HKCU first, then HKLM. If key found in HKLM, writes it back to HKCU (via `FUN_0060cc70`). If not found anywhere, creates in HKCU with the default value.
+- `ReadRegistrySetting` takes `std::basic_string` arguments internally and uses C++ string objects throughout.
 
 ## Command Line Parsing (`ParseCommandLineArg` `00617bf0`)
 Parses named flags from the saved command line (`DAT_00c82b88`):
 - `fullscreen` — sets `DAT_008afbd9=1` (fullscreen mode), optionally reads a width value
-- `widescreen` — sets `DAT_008ae1dc` to a widescreen aspect ratio constant (`DAT_008b6a84`; default is `DAT_007d52fc`)
+- `widescreen` — sets `DAT_008ae1dc` to a widescreen aspect ratio constant
+- `oldgen` — sets `DAT_008ae1ff=1` (in InitCLIAndTimingAndDevice, legacy renderer path)
+- `showfps` — sets `DAT_00bef754=1` (in FinalizeDeviceSetup)
+- `memorylwm` — sets `DAT_00bef6d7=1` (in FinalizeDeviceSetup, enables memory low-water-mark tracking)
+- `nofmv` — sets FMV object flag (in InitEngineObjects, disables FMV playback)
 
 Height is calculated as `ROUND(width / aspectRatio)` when fullscreen width is specified.
 
@@ -86,10 +105,10 @@ Flags storage: `DAT_008afc44` (mouseSpeed[2]), `DAT_008afc4c` (mouseAccel[2]), `
 
 ## Window Management
 
-### Window Class Registration (`00eb4b95`)
+### Window Class Registration (`RegisterWindowClass` `00eb4b95`)
 - Class: `OrderOfThePhoenixMainWndClass`
-- Style: `CS_DBLCLKS | CS_OWNDC | CS_VREDRAW | CS_HREDRAW`
-- Background: black brush; cursor: arrow
+- Style fullscreen: `CS_OWNDC | CS_DBLCLKS` (0x2020); windowed: adds `CS_VREDRAW | CS_HREDRAW` (0x2000)
+- Background: black brush; cursor: arrow (windowed only — fullscreen skips cursor load)
 - Calls `UnregisterClassA` first to handle crashed instances
 
 ### Window Creation (`CreateGameWindow` `0060db20`)
@@ -120,26 +139,36 @@ Flags storage: `DAT_008afc44` (mouseSpeed[2]), `DAT_008afc4c` (mouseAccel[2]), `
 - `WM_WTSSESSION_CHANGE (0x218)`: session connect(0) or lock(7) → return 1; else → return -1
 
 **Focus Loss (WM_ACTIVATE, wParam==0, fullscreen):**
-1. `PauseGraphicsState()` (`FUN_00617b60`)
+1. `PauseGraphicsState()` (`FUN_00617b60`) — pauses input via RealInputSystem vtable
 2. `UnacquireInputDevices()`
 3. `ShowCursor` loop until ≥ 1
-4. `DAT_00bef6c7 = 1` (has-focus flag set to "lost focus")
-5. `thunk_FUN_00ea53ca()` — likely render pause
+4. `DAT_00bef6c7 = 1` (has-focus flag = lost focus)
+5. `UpdateCursorVisibilityAndScene()` (`00ea53ca`) — switches render scene on cursor state change
 6. If delayed-op timer is 0 (not already pending):
-   - If audio state allows: `PauseAudio()` (`FUN_0061ef80`), set `DAT_00bef6d4`
-   - If game update state allows: `PauseGameUpdates(0)` (`FUN_0058b790`), set `DAT_00bef6d5`
+   - If audio state allows: `PauseAudioManager()` (`FUN_0061ef80`), set `DAT_00bef6d4`
+   - If game update state allows: `PauseGameObjects(0)` (`FUN_0058b790`), set `DAT_00bef6d5`
 7. `DAT_00bef6d8 = 0` (reset delayed timer)
 
 **Focus Gain (WM_ACTIVATE, wParam≠0, fullscreen):**
-1. Via game object at `DAT_00e6b384+0xc`: calls vtable method to get input device and acquires it
+1. Via `DAT_00e6b384` (RealInputSystem) at +0xc: calls vtable method to get device, acquires it
 2. `AcquireInputDevices()`
 3. `ShowCursor` loop until < 0
-4. `thunk_FUN_00ea53ca()`
+4. `UpdateCursorVisibilityAndScene()` (`00ea53ca`) — called with AL=0 (hidden cursor state)
 5. `DAT_00bef6c7 = 0`
 6. `DAT_00bef6d8 = 2000` (2-second delay before re-enabling updates)
 
 ### Window Placement Save (`SaveWindowPlacement` `0060d220`)
 Saves position/state via `WriteRegistrySetting` (`0060c670`) on WM_CLOSE.
+
+## UpdateCursorVisibilityAndScene (`00ea53ca`)
+Called `thunk_FUN_00ea53ca` in original labeling. Compares new cursor-visible state (AL register) vs `DAT_00bef67e`.
+If state changed:
+- AL = 0 (cursor now hidden = focus gained): if `DAT_00c82b08 != DAT_00c82ac8` → `SwitchRenderOutputMode(&DAT_00c82b08)`
+- AL ≠ 0 (cursor now shown = focus lost): if `DAT_00c82b00 != DAT_00c82ac8` → `SwitchRenderOutputMode(&DAT_00c82b00)`
+
+Updates `DAT_00bef67e` to new state. Called in:
+- WM_ACTIVATE focus-loss and focus-gain paths
+- WinMain cleanup
 
 ## Main Game Loop (`MainLoop` `0060dc10`)
 Runs until `WM_QUIT` received or `DAT_00bef6c5` exit flag is set.
@@ -151,10 +180,10 @@ Runs until `WM_QUIT` received or `DAT_00bef6c5` exit flag is set.
    - Has focus but flag says "lost": `UnacquireInputDevices()`, show cursor, `SwitchRenderOutputMode`
 3. `PeekMessageA` (PM_REMOVE) — if `WM_QUIT (0x12)`: return `wParam`
 4. No messages:
-   - Compute frame budget: `uStack_44 = ROUND((accumHigh * k1 + accumLow) * k2 * k3)` using constants at `DAT_008475d8`, `DAT_00845594`, `DAT_00845320`
+   - Compute frame budget using constants at `DAT_008475d8` (1/65536), `DAT_00845594` (0.001), `DAT_00845320` (1000.0)
    - `GameFrameUpdate()`
-   - If `DAT_00bef6d7` (game update enabled): lazy-init `FUN_00612f00()` with atexit cleanup; call `thunk_FUN_00eb6dbc()` and track min in `DAT_008afb08`
-   - Manage `DAT_00bef6d8` delayed-op countdown; on expiry: optionally `thunk_FUN_00ec67e8()` (resume audio) and `ResumeGameUpdates()` (`FUN_0058b8a0`)
+   - If `DAT_00bef6d7` (game update enabled / `memorylwm` flag): lazy-init `InitFrameCallbackSystem()` + `QueryMemoryAllocatorMax()` tracking `g_nMinFreeMemory` in `DAT_008afb08`
+   - Manage `DAT_00bef6d8` delayed-op countdown; on expiry: optionally `AudioStream_Resume()` (`00ec67e8`) and `ResumeGameObjects()` (`FUN_0058b8a0`)
    - Frame rate cap: if frame took < budget, `Sleep(0)`
 
 ## Timing System
@@ -181,10 +210,23 @@ timeEndPeriod(caps.wPeriodMin)
 6. `DAT_00c83110 = ((accum * 3) / 0x10000)` — game ticks (3x speed)
 7. If accumulated time ≥ next callback time (`DAT_00c831a8/ac`):
    - Advance callback time by interval (`DAT_00c83190/94`)
-   - Toggle `DAT_008e1648` (frame flip index)
-   - Store current timing in double-buffer at `DAT_00c83170+flip*8`
-   - Call `UpdateFrameTimingPrimary(&local_4)` and `(*DAT_008e1644[0])(&local_4)`
-8. Check secondary callback buffer, call `InterpolateFrameTime` and `(*DAT_008e1644[1])()`
+   - Toggle `DAT_00c83130` (double-buffer flip index, used by UpdateFrameTimingPrimary)
+   - Call `UpdateFrameTimingPrimary(&localTick)` and `(*DAT_008e1644[0])(&localTick)`
+8. Check secondary callback, call `InterpolateFrameTime` and `(*DAT_008e1644[1])()`
+
+### UpdateFrameTimingPrimary (`00617f50`)
+Called when accumulated time exceeds callback interval. Stores timing in double-buffer:
+- Increments `DAT_00c83114` (tick counter) by `localTick * 3` if DAT_00bef768+4 == 0
+- Toggles `DAT_00c83130` (flip index)
+- `DAT_00c83128[flip]` = localTick; `DAT_00c83120[flip]` = game time
+- Uses constants `DAT_00845594` (0.001) and `DAT_00845320` (1000.0) for the tick computation
+
+### InterpolateFrameTime (`00617ee0`)
+Smooth interpolation between double-buffered frame values:
+```
+t = (currentTick - prevTick) / (currTick - prevTick)
+result = prevTime + (currTime - prevTime) * t
+```
 
 ### Key timing globals
 | Address | Name | Purpose |
@@ -195,19 +237,94 @@ timeEndPeriod(caps.wPeriodMin)
 | `DAT_00c83114` | tick counter | incremented in primary callback |
 | `DAT_00c831a8/ac` | next callback time | 64-bit |
 | `DAT_00c83190/94` | callback interval | 64-bit |
-| `DAT_008e1648` | frame flip index | 0 or 1, toggled each callback |
-| `DAT_00c83170` | timing double-buffer | 2×8 bytes |
+| `DAT_00c83130` | frame flip index | 0 or 1, toggled each callback |
+| `DAT_00c83128` | timing double-buffer (ticks) | 2×4 bytes indexed by flip |
+| `DAT_00c83120` | timing double-buffer (time) | 2×4 bytes indexed by flip |
 | `DAT_008e1644` | callback table ptr | function pointer array [primary, secondary] |
+| `DAT_00845594` | float const | 0.001 (1/1000) — timing scale |
+| `DAT_00845320` | float const | 1000.0 — timing scale |
+| `DAT_008475d8` | float const | 1/65536 — 16.16 fixed-point denominator |
 
 ### Deferred Callback Queue (`ProcessDeferredCallbacks` `00636830`)
 Linked list at `DAT_00bef7c0`. Each node has next pointer at `+0x7c`.
 - Per frame: processes as many nodes as possible within 2ms
-- `FUN_0063d600(node)` returns 1 when the node's work is done; node is then removed
+- `BuildRenderBatch(node)` returns 1 when the node's work is done; node is then removed
+- Time checked using same `timeGetTime()` / `timeBeginPeriod` pattern as GetGameTime
+
+## DirectX Initialization Chain
+
+### InitDirectXAndSubsystems (`00eb612e`, `__thiscall`)
+Called from WinMain with client height. Returns OR of sub-init failures (0 = success):
+1. `InitCLIAndTimingAndDevice(height, ?, hWnd)` (`00614370`) — creates CommandParser, resets timing, creates D3D device
+2. `InitEngineObjects()` (`0060c2e0`) — allocates engine subsystem objects
+3. `DAT_008df65a = 1`, `DAT_00aeea5c = 2` — subsystem state flags
+4. `FinalizeDeviceSetup()` (`006147f0`) — sets callback table, registers message handlers
+5. `InitAudioSubsystem()` (`00eb60d3`) — opens audio device (async polling)
+
+### InitCLIAndTimingAndDevice (`00614370`)
+1. Allocates CLI::CommandParser (`AllocEngineObject(0xc, "CLI::CommandParser")`) → `DAT_00e6b328`
+2. One-shot InitFrameCallbackSystem guard (`_DAT_00e74c20 & 1`)
+3. Resets timing globals to zero: `DAT_00c83110/14/18/1c/28/c/20/4/30 = 0`
+4. `FUN_0064ae00(&DAT_00c8e490)` — initializes render batch system
+5. `FUN_0067c290(height, ?, 0, 0, 6, 1, 1, 1, 1)` — creates the D3D device
+6. On D3DERR (-0x7fffbffb): `ShowCursor(1)` (device lost during init)
+7. `ParseCommandLineArg("oldgen", ...)` — legacy renderer flag
+8. `(*(*DAT_00c8c580))(0, 0)` — initial render callback dispatch
+
+### InitEngineObjects (`0060c2e0`)
+Allocates and wires up core engine subsystem objects:
+- `GlobalTempBuffer` (0x3c bytes) → `DAT_00e6b378`
+- `RealGraphSystem` (8 bytes) → `DAT_00e6b390`; vtable `PTR_FUN_00885010`
+- `RealInputSystem` (0x34 bytes) → `FUN_00617890()` which sets `DAT_00e6b384` (the input manager)
+- `Locale` (0x8c bytes) → `DAT_00e6b304`; handles localization
+- `FMV` (0x18 bytes) → `DAT_00e6b2dc`; checks `nofmv` flag
+- Calls `thunk_FUN_00eb87ba`, `thunk_FUN_00eb88b2`, `FUN_006677c0` for additional subsystems
+
+### FinalizeDeviceSetup (`006147f0`)
+Sets `DAT_008e1644 = &PTR_PTR_008d0f94` (frame callback table). Registers message handlers:
+- `iMsgDeleteEventHandler`, `iMsgDeleteEntity`, `iMsgOnDeleteEntity`
+- `iMsgDoRender`, `iMsgDoRenderDirectorsCamera`, `iMsgPreShowRaster`
+- `iMsgStartSystem`, `iMsgStopSystem`
+Sets `DAT_00bef750 = 1` (device ready), `DAT_00bef754` = `showfps` flag, `DAT_00bef6d7` = `memorylwm` flag.
+Also calls `FUN_0060b740()` which creates `GameServices::Open::Create` and `TimeManager::Instance` objects:
+- `DAT_00bef6c8` = GameServices::Open object (1 byte)
+- `DAT_00bef768` = TimeManager::Instance object (8 bytes, via `thunk_FUN_00eb797e()`)
+
+### PreDirectXInit (`00ec64f9`)
+Sets up the audio/render subsystem before DirectX device creation:
+- `DAT_00bf1b18 = DAT_00bef6d0` (passes the engine factory object to the audio system)
+- `DAT_00bf1b10 = 0` (clears audio-present flag; set non-zero by hardware detection in FUN_006ac0b0/thunk_FUN_00ec6e91)
+- Copies audio device string from `.rodata` (0x7d3ddb) into `DAT_00be93d0`
+- `FUN_006ac0b0()`, `thunk_FUN_00ec6e91()` — audio hardware detection/init
+- `DAT_00bf1b1c = thunk_FUN_00ec72a9()` — creates audio output context
+- `DAT_00bf1b20 = FUN_00611940(DAT_00bf1b1c)` — creates a buffer or thread handle
+- One-shot InitFrameCallbackSystem guard
+
+### InitAudioSubsystem (`00eb60d3`)
+Checks `DAT_00bf1b10` (audio present). If non-zero:
+- `FUN_006a9080()` — open audio device (async: polls `FUN_006109d0()` + `SleepEx(0,1)`)
+- `FUN_006a91a0()` — query format/caps (expects 0x80 result)
+- `FUN_006a9140(device, 0)` — configure audio output
+- `FUN_006a90e0()` — start audio stream
+All audio operations use async SleepEx-polling pattern via `DAT_00be82ac` command queue.
+
+## RealInputSystem (`DAT_00e6b384`)
+The main input manager, allocated in `InitEngineObjects` via `FUN_00617890`:
+- Vtable: `PTR_FUN_00884ff4`
+- Field `+0xc`: pointer to sub-object (device manager)
+- On sub-object vtable +0x10: returns device interface
+- On device interface +0x218: the `IDirectInputDevice8*`
+- On that device vtable +0x20: Pause/Unacquire method
+
+Used in:
+- `PauseGraphicsState` (`00617b60`) to pause input on focus loss
+- `WM_ACTIVATE` focus-gain path to re-acquire input
+- `WinMain` cleanup to pause input before exit
 
 ## DirectX Device Management
 
 ### UpdateDirectXDevice (`DirectX_UpdateDevice` `0067d310`)
-1. Calls `PreDeviceCheck()` (`FUN_0067d2e0`)
+1. Calls `PreDeviceCheck()` (`0067d2e0`) — queries texture mem, handles low-mem
 2. `IDirect3DDevice9::TestCooperativeLevel` (vtable +0xc)
 3. On `D3DERR_DEVICELOST (-0x7789f798)`: sets `DAT_00bf18aa=1`, sleeps 50ms
 4. On `D3DERR_DEVICENOTRESET (-0x7789f797)`: calls `ReleaseDirectXResources()`, then `Reset(&DAT_00b94af8)`, then `RestoreDirectXResources()`
@@ -220,28 +337,30 @@ Linked list at `DAT_00bef7c0`. Each node has next pointer at `+0x7c`.
 3. Clear `DAT_00af1390`, `DAT_00ae9250` (cached surface pointers)
 4. If `DAT_00bf1934 != NULL && DAT_00bf1934 != 0xbacb0ffe`:
    - Get back buffer from `DAT_00bf1924` (via vtable +0x14)
-   - `FUN_0067ecf0(local_c, 0)`
-   - Release surface `local_c`
-   - Release `DAT_00bf1934`
+   - `SetCachedRenderTargets(surface, 0)` — unregisters from cache
+   - Release surface and `DAT_00bf1934`
 5. Release `DAT_00bf1930` (back buffer) if non-null
 6. Release `DAT_00bf1938` (additional render target) if non-null
 7. `thunk_FUN_00ec19b5()` — post-release cleanup
 
 ### RestoreDirectXResources (`0067d0c0`)
-1. `InitRenderStates()` (`FUN_00675950`)
-2. If `DAT_00b95034 == NULL`: `CreateGPUSyncQuery()` (`FUN_0067b820`)
-3. `FUN_0067bb20()` — (empty stub in current analysis)
+1. `InitRenderStates()` (`00675950`) — uploads shaders; extended path if `DAT_00bf1994 > 2`
+2. If `DAT_00b95034 == NULL`: `CreateGPUSyncQuery()` (`0067b820`)
+3. `FUN_0067bb20()` — empty stub in current analysis
 4. Get back buffer via `DAT_00bf1924` vtable +0x14 → `DAT_00bf1930`; cache in `DAT_00af1390`
 5. Get back buffer surface description
 6. `CreateTexture` (vtable +0x74) for additional render target → `DAT_00bf1938`
-7. If `DAT_00bf1970 == 0` (AAMode == off) and HW supports it:
-   - `CreateTexture` (vtable +0x5c) with same dimensions → `local_28`
+7. If `DAT_00bf1970 == 0` (AAMode == off) and HW supports it (caps.TextureOpCaps & 0x80 check):
+   - `CreateTexture` (vtable +0x5c) with same dimensions → texture
    - Release old `DAT_00bf1930`, get `GetSurfaceLevel(0)` → `DAT_00af1390`
-   - `DAT_00bf1934 = local_28`; `DAT_00bf1930 = DAT_00af1390`
-8. Else: `DAT_00bf1934 = 0xbacb0ffe` (sentinel - AA path, no extra surface)
+   - `DAT_00bf1934 = texture`; `DAT_00bf1930 = DAT_00af1390`
+8. Else: `DAT_00bf1934 = 0xbacb0ffe` (sentinel - AA path)
 9. `DAT_00ae9250 = DAT_00bf1938`
-10. `SetRenderTarget(0, DAT_00af1390)` and secondary render target
-11. `InitD3DStateDefaults()` (`FUN_00674430`)
+10. `SetRenderTarget(0, DAT_00af1390)` and depth stencil
+11. `InitD3DStateDefaults()` (`00674430`)
+
+### SetCachedRenderTargets (`0067ecf0`)
+Called `FUN_0067ecf0` in older labels. Avoids redundant `SetRenderTarget`/`SetDepthStencilSurface` calls. Caches in `DAT_00af1390` / `DAT_00ae9250`. Uses vtable offsets +0x94 and +0x9c on device.
 
 ### DirectX resource globals
 | Address | Purpose |
@@ -258,36 +377,26 @@ Linked list at `DAT_00bef7c0`. Each node has next pointer at `+0x7c`.
 | `DAT_00bf1970` | AAMode (0 = AA path active) |
 | `DAT_00b94af8` | Saved `D3DPRESENT_PARAMETERS` for Reset |
 | `DAT_00b94748` | Render state cache array (indexed by D3DRENDERSTATETYPE) |
-| `DAT_009dcc50/54` | Vertex shader type/pointer pairs (count: `DAT_00bf1a08`) |
-| `DAT_00e17ce0` | Pixel shader object array (count: `DAT_00bf1a0c`, stride 0x160) |
-| `DAT_00bf1a08` | Vertex shader count |
-| `DAT_00bf1a0c` | Pixel shader count |
-| `DAT_00bf1994` | Shader/feature level capability (> 2 = extended) |
-| `DAT_00bf193c` | Available texture memory in MB (updated by QueryAvailableTextureMem) |
+| `DAT_00bf1994` | Shader/feature level capability index (> 2 = extended) |
+| `DAT_00bf193c` | Available texture memory in MB (updated by PreDeviceCheck) |
+| `DAT_00bf1b10` | Audio present flag (checked in InitAudioSubsystem) |
 
 ### D3D State Defaults (`InitD3DStateDefaults` `00674430`)
-Initializes large arrays of render state, sampler state, and texture stage state defaults.
-Uses `SetCachedRenderState` (`0067eb90`) which caches values in `DAT_00b94748` to avoid redundant D3D calls.
-Conditionally adjusts blend states for hardware that lacks certain texture operation capabilities (checked via `GetAdapterCapsPtr` + 0x3c bit tests).
-Also sets: fog state defaults (`_DAT_00d7ea68=5`), clears `DAT_008d3878` sentinel area with `0xcd`.
+Initializes render state, sampler state, and texture stage state defaults. Clears dirty flags `DAT_00bf18a8/ac/c0/c4`. Fills `DAT_008d3878` (0x4c bytes) with 0xcd sentinel. Sets fog defaults (`_DAT_00d7ea68=5`). Conditionally adjusts blend states if `!(caps.TextureOpCaps & 0x80)` or `DAT_00bf1980 == 0x10` (16-bit colour mode). Calls `thunk_FUN_00ebfe83()` and `SetCachedRenderState(0x19, 8)`.
 
 ### GPU Sync Query (`CreateGPUSyncQuery` `0067b820`)
-Creates a `D3DQUERYTYPE_EVENT` query (vtable offset 0xe0 on device).
-Stored in `DAT_00b95034`. Used for GPU-CPU synchronization.
-The `swap effect` flag (`DAT_008ae1fc`) selects between DISCARD (2) and COPY (0) queries.
+Creates `D3DQUERYTYPE_EVENT` (0xe0) query on device vtable +0x68 with flags `DAT_00bf19ac | 0x208`. Swap effect: `(DAT_008ae1fc != 0) ? 0 : 2`. Stored in `DAT_00b95034`.
 
-### Cached Render Target Setter (`SetCachedRenderTargets` `0067ecf0`)
-Avoids redundant `SetRenderTarget`/`SetDepthStencilSurface` calls by caching the last set values in `DAT_00af1390` (render target) and `DAT_00ae9250` (depth stencil).
-
-### Video Memory Monitor (`QueryAvailableTextureMem` `0067d2e0`)
-Calls `GetAvailableTextureMem` (vtable+0x10), stores result in MB in `DAT_00bf193c`.
-If result < 33MB, calls low-memory handler. Used to detect texture memory pressure.
-
-### Adapter Capabilities (`GetAdapterCapsPtr` `0066dfe0`)
-Returns pointer to the D3DCAPS9 data: `DAT_008ae200 * 0x584 + 0x454 + DAT_00bf19a8`
-Each adapter entry is 0x584 bytes; offset 0x454 into the entry holds capability data.
+### Video Memory Monitor (`PreDeviceCheck` `0067d2e0`)
+Calls `GetAvailableTextureMem` (vtable+0x10). Stores result >> 20 (MB) in `DAT_00bf193c`. If 0 < result < 33 MB, calls `thunk_FUN_00ebe85b()` (low texture memory handler).
 
 ## DirectInput Management
+
+### RealInputSystem Init (`FUN_00617890`)
+Sets up the `RealInputSystem` object at `DAT_00e6b384`:
+- Vtable: `PTR_FUN_00884ff4`; field `+0x8` = 0x20; copies string "RealInputSystem::RealInputSystem" to `DAT_00bef6e8`
+- One-shot `InitFrameCallbackSystem` guard
+- This is where `DAT_00e6b384` is assigned
 
 ### Input Devices
 - `DAT_00e6a070`: `IDirectInputDevice8*` keyboard
@@ -299,91 +408,112 @@ Acquire/unacquire all devices when gaining/losing focus.
 Fatal error via `FUN_0066f810` if any device fails.
 Also calls `Ordinal_5(1/0)` — custom cursor show/hide.
 
-## Game State and Audio
+## Audio System
 
-### DirectX and Subsystem Initialization (`InitDirectXAndSubsystems` `00eb612e`)
-Called from WinMain after window creation with window height:
-1. `FUN_00614370(height, ?, hWnd)` — creates D3D device and set present params
-2. `FUN_0060c2e0()` — additional graphics init
-3. Sets `DAT_008df65a=1`, `DAT_00aeea5c=2` (subsystem state flags)
-4. `FUN_006147f0()` — finalizes device setup
-5. `thunk_FUN_00eb60d3()` — DirectInput or audio init
-Returns 0 on success (OR of all sub-failures).
+### AudioStream Pause/Resume
+Both functions use `in_EAX` as `this` (audio stream/track object):
+- `this+0x1c` = audio timer pointer
+- `this+0x28` = pause flag (set to 1 on pause, 0 on resume)
+- `this+0x16` = pause timestamp (set on pause to GetGameTime())
+- `this+0x17` = cumulative playback time (updated on resume)
+- On pause: calls `thunk_FUN_00ec693d(0)`, `thunk_FUN_00ec66f1()`
+- On resume: calls `thunk_FUN_00ec693d(0x1000)`, `thunk_FUN_00ec66f1()`
+- Pitch correction: if `piVar2[4] == 0x1000` (normal pitch), direct time addition; else scaled by pitch/0x1000
 
-### Game Subsystem Initialization (`InitGameSubsystems` `00eb496e`)
-Registers callbacks, enumerates DirectInput devices (`FUN_00688370(4, 0)`), and loads the language/localization selection screen (`FUN_005090a0("LanguageSelect")`).
+### Focus Loss (WM_ACTIVATE, focus-loss path):
+1. `PauseAudioManager()` (`FUN_0061ef80`) — calls `AudioStream_Pause()` (`FUN_006a9ea0`) on active track
+2. Resumed after 2-second delay via `AudioStream_Resume()` (`00ec67e8`) when timer expires
+
+## Game State and Subsystem Init
 
 ### Frame Callback System (`InitFrameCallbackSystem` `00612f00`)
 Initializes the frame callback singleton at `DAT_00e6e870`:
 - `DAT_00e6e870 = &PTR_FUN_00883f3c` (primary callback entry)
 - `DAT_00e6e874 = &PTR_FUN_00883f4c` (secondary callback entry)
 - `_DAT_00bef728 = &DAT_00e6e870` (pointer to the table, = `DAT_008e1644`)
+- Clears `DAT_00e6e880..e6e89c` (8 callback slots)
+- Called multiple times via one-shot guard (`_DAT_00e74c20 & 1`)
+
+### GetOrInitCallbackManager (`00eb5c3e`)
+Returns `&DAT_00e6e870` (the callback manager singleton pointer). One-shot init guard at `_DAT_00e74c20 & 1`. This is NOT a COM object creator; it returns the callback table base address.
+
+### Engine Object Allocator (`FUN_00614210`)
+Factory function with signature `AllocEngineObject(size, tagName)`. Creates heap objects with debug tags. Used throughout init to allocate subsystem objects.
+
+### InitGameSubsystems (`00eb496e`)
+Sets `_DAT_00e69ca0 = FUN_0060c130` (registers a callback). Enumerates DirectInput devices via `FUN_00688370(4, 0)`. Loads the language/localization selection screen via `FUN_005090a0("LanguageSelect")`. Returns 1 on success.
 
 ### Pause/Resume System
 - **Focus loss**: `PauseAudioManager()` (`FUN_0061ef80`) + `PauseGameObjects(0)` (`FUN_0058b790`)
 - **Resume**: triggered by `DAT_00bef6d8` expiry:
-  - `thunk_FUN_00ec67e8()` resumes audio
+  - `AudioStream_Resume()` (`00ec67e8`) resumes audio
   - `ResumeGameObjects()` (`FUN_0058b8a0`) resumes game objects
 
 ### Game Object Pause State Machine (`DAT_00c7b908`)
 Controls which systems are paused (values 0–7):
-- **State 0 (full pause)**: "chapter-cutscene-in" animation, vtable+0x24 (Pause) on all systems. Records pause time in `_DAT_00c7b90c = DAT_00c8311c/3 + param_1`.
+- **State 0 (full pause)**: "chapter-cutscene-in" animation, vtable+0x24 (Pause) on all systems. Records pause time.
 - **States 4–5 (audio-only pause)**: pauses `DAT_00c7c370` (audio manager) only, transitions to state 6.
 - **State 6**: fully paused, no-op.
-- **State 7 (resuming)**: "default" animation, vtable+0x28 (Resume) on all systems, clears `DAT_00c6d7e0`.
+- **State 7 (resuming)**: "default" animation, vtable+0x28 (Resume) on all systems.
 
 Pausable systems: `DAT_00c7c370` (audio/music manager), `DAT_00c7b924` (secondary system), array at `DAT_00c7ba4c` (stride 0x12×4), additional systems at `DAT_00c7d038+0xc` (stride 0xb×4).
 
 ### Deferred Render Batch Queue
-Linked list at `DAT_00bef7c0` (processed by `ProcessDeferredCallbacks`).
-Each node is a draw call descriptor (geometry + shader + flags).
-`BuildRenderBatch` (`0063d600`) processes one node per call, building entries in the material table at `DAT_00ae9258`.
-Recognized shader types: `BLOOM`, `GLASS`, `BACKDROP`.
-Returns 0 while more vertices remain; 1 when the node is complete (removed from list).
+Linked list at `DAT_00bef7c0` (processed by `ProcessDeferredCallbacks`). Each node is a draw call descriptor. `BuildRenderBatch` (`0063d600`) processes one node per call, building entries in the material table. Recognized shader types: `BLOOM`, `GLASS`, `BACKDROP`.
 
 ### Memory Pressure Tracking
-`QueryMemoryAllocatorMax` (`00eb6dbc`) queries the game's internal memory allocator for the largest free block size (thread-safe via critical section). The minimum value across all frames is tracked in `DAT_008afb08`, providing a low-water-mark for memory pressure detection.
+`QueryMemoryAllocatorMax` (`00eb6dbc`) uses a critical section at `allocator+0x4e4`. Scans a priority-indexed free list (`allocator+0x428`, 0xfe entries) and a linked list at `allocator+0x30..0x3c`. Values masked to `& 0x7ffffff8` (8-byte alignment). Returns the largest free block size. Minimum across frames tracked in `DAT_008afb08`.
 
-### Global State Flags
+## RenderAndAudioTeardown (`00ec6610`)
+Called on exit before input cleanup:
+1. If `DAT_00bf1b1c` set: calls `thunk_FUN_00eb584e()`, `FUN_006119c0()`, clears `DAT_00bf1b18/1c`
+2. `FUN_006ace30()` — audio teardown (1)
+3. `FUN_006108c0()` — audio teardown (2)
+4. `FUN_006ac930()` — audio teardown (3)
+5. If `DAT_00bf1b2c` set: closes handle `DAT_00bf1b34` (renderer thread?), clears `DAT_00bf1b30/2c`
+
+## Global State Flags
 | Address | Name | Purpose |
 |---------|------|---------|
 | `DAT_00bef6c5` | exit flag | Non-zero = exit MainLoop |
 | `DAT_008afbd9` | fullscreen | Boolean fullscreen mode |
 | `DAT_00bef6c7` | focus lost | 1 = window does not have focus |
 | `DAT_00bef67e` | cursor state | Current cursor visibility state |
-| `DAT_00bef67c` | unknown | Checked in focus-loss cursor path |
-| `DAT_00bef67d` | unknown | Checked in focus-loss cursor path |
+| `DAT_00bef67c` | unknown | Checked in UpdateCursorVisibilityAndScene |
+| `DAT_00bef67d` | unknown | Checked in UpdateCursorVisibilityAndScene |
 | `DAT_00bef6d8` | delayed op timer | ms countdown; expires → resume audio/updates |
-| `DAT_00bef6d7` | update enabled | Game update sub-system enabled flag |
+| `DAT_00bef6d7` | memorylwm flag | Enabled by cmdline 'memorylwm'; enables memory tracking |
 | `DAT_00bef6d4` | audio paused | Audio was paused on focus loss |
 | `DAT_00bef6d5` | updates paused | Physics/updates paused on focus loss |
+| `DAT_00bef6c6` | subsys init flag | Set to 1 after InitGameSubsystems |
+| `DAT_00bef750` | device ready | Set to 1 in FinalizeDeviceSetup |
+| `DAT_00bef754` | showfps | Enabled by cmdline 'showfps' |
+| `DAT_00bef755` | unknown | Set to 1 in InitCLIAndTimingAndDevice |
+| `DAT_00bef768` | TimeManager | Pointer to TimeManager::Instance (8 bytes); checked in UpdateFrameTimingPrimary |
+| `DAT_00bef6c8` | GameServices | Pointer to GameServices::Open object |
+| `DAT_00bf1b10` | audio present | Non-zero if audio hardware detected; checked in InitAudioSubsystem |
+| `DAT_00bf1b14` | audio init flag | Set to 1 in PreDirectXInit |
+| `DAT_00bf1b18` | engine obj ref | Copy of DAT_00bef6d0, stored in audio subsystem |
+| `DAT_00bf1b1c` | audio context | Created by thunk_FUN_00ec72a9; checked in RenderAndAudioTeardown |
+| `DAT_00bf1b20` | audio buffer | Created by FUN_00611940(DAT_00bf1b1c) |
+| `DAT_00bf1b30` | audio thread id | Thread ID for audio pump; checked in FUN_006ac010 |
+| `DAT_00bf1b2c` | audio thread active | If set: close handle DAT_00bf1b34 on teardown |
 | `DAT_00c82b08` | scene ID | Checked against DAT_00c82ac8 in render mode switch |
 | `DAT_00c82b00` | scene ID 2 | Alternate scene ID for render mode switch |
 | `DAT_00c82ac8` | target scene | Target scene ID for SwitchRenderOutputMode |
-| `DAT_00e6b384` | game state obj | Main game-state object pointer |
-| `DAT_00c7b908` | pause state | State check before PauseGameUpdates |
+| `DAT_00e6b384` | RealInputSystem | Main input manager object pointer |
+| `DAT_00c7b908` | pause state | State check before PauseGameObjects |
 | `DAT_008afb08` | min memory | Minimum available video memory across frames |
 | `DAT_00bf192c` | fullscreen flag 2 | Set to 1 in fullscreen path |
-| `DAT_00bef6cc` | window handle | Main HWND (duplicate of ghWnd?) |
-| `DAT_00bef6d0` | COM object | Created via vtable in WinMain, released on exit |
-
-## Frame Rendering
-
-### Double-Buffer Callback System
-The timing system uses a double buffer (flip index `DAT_008e1648`) to smoothly pass timing data to callbacks:
-- `UpdateFrameTimingPrimary` stores tick/time in `DAT_00c83128/c83120` indexed by flip
-- `InterpolateFrameTime` reads from the opposite buffer to interpolate between two frames
-- Callback table at `DAT_008e1644`: `[0]` = primary callback, `[1]` = secondary callback
-
-### Render Output Modes (`SwitchRenderOutputMode` `00612530`)
-Called on focus transitions to change the rendering mode/scene.
-Uses scene IDs `DAT_00c82b00/08` compared against target `DAT_00c82ac8`.
+| `DAT_00bef6cc` | window handle | Main HWND |
+| `DAT_00bef6d0` | engine object | Created via callback factory in WinMain, 0xb58 bytes |
 
 ## Key Components
 - **Window Management**: Full Win32 with fullscreen/windowed, placement persistence, session change handling
-- **Configuration**: Registry (HKCU/HKLM fallback) with extensive settings, command-line override
+- **Configuration**: Registry (HKCU/HKLM fallback, std::basic_string internally) with extensive settings, command-line override
 - **Rendering**: DirectX 9, device lost recovery, dual render targets, GPU sync query, D3D state tables
-- **Input**: DirectInput 8, keyboard/mouse/2 joysticks, acquire/unacquire on focus change
+- **Input**: RealInputSystem (DAT_00e6b384), DirectInput 8, keyboard/mouse/2 joysticks, acquire/unacquire on focus change
 - **Timing**: High-resolution multimedia timer, 16.16 fixed point, 3× game speed multiplier, double-buffered callbacks
-- **Audio**: Pause on focus loss, 2-second delayed resume
+- **Audio**: Async init, pause on focus loss, 2-second delayed resume, pitch-corrected seek on resume
 - **Message Loop**: Integrated with game update, frame limiter, deferred callback queue
+- **Engine Objects**: Allocator with debug tags, message handler registration, CLI CommandParser

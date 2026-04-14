@@ -1,149 +1,134 @@
-# Questions for Further Exploration (Iteration 2)
+# Questions for Further Exploration (Iteration 3)
 
 ## DirectX Initialization Chain
 
-1. What is `thunk_FUN_00eb5c3e()`?
-   - Called in WinMain after window creation
-   - Returns a COM-like pointer used to create DAT_00bef6d0
-   - Likely initializes DirectX or some engine sub-system
-   - DAT_00bef6d0 is released via vtable method +0xc on exit
+1. What does `thunk_FUN_00ec64f9()` do?
+   - Called in WinMain immediately after creating DAT_00bef6d0, before InitDirectXAndSubsystems
+   - Possible: initializes the engine object created in the previous step
 
-2. What is `thunk_FUN_00eb612e(height)`?
-   - Called with window client height after DirectX creation
-   - Returns 0 on failure (causes TerminateProcess)
-   - Likely creates the DirectX device or swap chain
+2. What is `DAT_00bef6d0` exactly?
+   - Created via `(*DAT_00e6e874[0])(0xb58, {0x88332000000001, 0})`
+   - 2904-byte allocation through callback manager secondary factory
+   - Released via `(*(callback_mgr + 0xc))(DAT_00bef6d0, 0)` — NOT a vtable method call
+   - What class does this correspond to? Some scene graph root?
 
-3. What is `thunk_FUN_00eb496e()`?
-   - Called right before setting DAT_00bef6c6 = 1
-   - Likely completes DirectInput initialization
+3. What is `FUN_0067c290` (CreateD3DDevice)?
+   - Called from InitCLIAndTimingAndDevice: `FUN_0067c290(height, ?, 0, 0, 6, 1, 1, 1, 1)`
+   - 9 parameters — what are they all?
+   - Returns D3DERR-like error code
+   - Where does it create the IDirect3DDevice9 and store DAT_00bf1924?
 
-4. What initializes `DAT_00bf1924`?
-   - Used in RestoreDirectXResources as `IDirect3D9*` or swap chain
-   - Called via vtable +0x14 to get back buffer
-   - Where is it first set?
+4. What is `FUN_0067bb20()` in RestoreDirectXResources?
+   - Called after CreateGPUSyncQuery with no obvious side effects
+   - The current analysis says "empty stub" but may do something in some paths
 
-5. What does `FUN_00684f30()` do?
-   - Called from InitRenderStates unconditionally
-   - Likely sets up some D3D state or caps check
+5. What is `thunk_FUN_00eb4a5d()` in WinMain cleanup?
+   - Called after RenderAndAudioTeardown, before input pause on exit
+   - Unknown purpose — audio or resource cleanup?
 
-6. What determines `DAT_00bf1994`?
-   - Shader/capability level index
-   - If > 2, extended state init path (FUN_00685410) is taken
-   - Set during device creation?
-
-7. What is `DAT_00bf19a8` and the capability check at `0x474 + DAT_00bf19a8`?
-   - Used in InitD3DStateDefaults to check texture op capabilities
-   - Offset 0x474 in what structure? D3DCAPS9?
-
-## Game State Object (`DAT_00e6b384`)
-
-8. What is the game state object at `DAT_00e6b384`?
-   - Used in WindowProc and MainLoop
-   - Field at +0xc: pointer to another object
-   - On that sub-object: vtable +0x10 returns something, then +0x218 gives input device
-   - What class is this? A scene/world manager?
-
-9. What is `DAT_00e6b2dc`?
-   - Used in WindowProc focus loss: `*(int**)(DAT_00e6b2dc + 4)`
-   - Points to an object with a flag at +0xa0
-   - Checked before calling PauseAudio
-
-10. What is `DAT_00c7b908`?
-    - Compared to 1 before calling PauseGameUpdates
-    - If == 1, the call is skipped
-    - Game state enum? Pause mode?
-
-## Timing System
-
-11. What is the exact tick frequency / callback interval?
-    - `DAT_00c83190/94` is the callback interval (64-bit)
-    - What value is it set to? How is it calculated?
-    - Where is it initialized?
-
-12. What triggers `DAT_008e1644` callbacks?
-    - Primary callback: `(*DAT_008e1644[0])(&localTick)`
-    - Secondary callback: `(*DAT_008e1644[1])()`
-    - What systems register these callbacks? Renderer? Physics?
-
-13. What are the frame rate constants?
-    - `DAT_008475d8`: float constant for frame budget calc
-    - `DAT_00845594`: float constant
-    - `DAT_00845320`: float constant
-    - Together they compute target frame period. What values?
-
-14. What is `DAT_00c83188`?
-    - Used in GameFrameUpdate: `uVar5 = DAT_00c83188 + _DAT_00c831a0`
-    - Also read in MainLoop for frame timing calculation
-    - Is this a per-frame time accumulator?
-
-## Scene Management
-
-15. What are scene IDs `DAT_00c82b00`, `DAT_00c82b08`, `DAT_00c82ac8`?
-    - Compared in MainLoop for render mode switching
-    - How many scene IDs exist? Are they enums?
-    - When does DAT_00c82b08 ≠ DAT_00c82ac8? (triggers render mode change)
-
-16. What does `SwitchRenderOutputMode (FUN_00612530)` do?
-    - Called with a pointer to a scene ID
-    - Does it switch between in-game / pause screen / loading screen?
+6. What does `thunk_FUN_00ec04dc()` do in ReleaseDirectXResources?
+   - Called BEFORE surface releases — likely notifies the render pipeline
+   - And `thunk_FUN_00ec19b5()` called AFTER — confirms pre/post cleanup pattern
 
 ## Audio System
 
-17. What is `PauseAudio (FUN_0061ef80)` and its counterpart?
-    - Called on focus loss; audio resumes via `thunk_FUN_00ec67e8()`
-    - Is this streaming audio, music, or all audio?
+7. What is the full audio init chain in FUN_006109d0?
+   - Used as the polling gate in all async audio operations
+   - Returns -2 on error, 1 on success, 0 while pending
+   - What event/condition does it wait for?
 
-18. What COM object is `DAT_00bef6d0`?
-    - Created via `(*(code*)**(undefined4**)(iVar12+4))(0xb58, &uStack_d0)`
-    - `uStack_d0 = 0x88332000000001`
-    - Released via vtable +0xc on exit
-    - Could be a DirectSound or XAudio2 interface?
+8. What is `thunk_FUN_00ec693d(state)` (audio decoder control)?
+   - Called with 0 on pause, 0x1000 on resume
+   - The 0x1000 value matches the "normal pitch" constant — likely seek/speed control
+   - Is this a DirectSound or custom streaming decoder call?
 
-## Game Update System
+9. What is `thunk_FUN_00ec66f1()` (audio finalize)?
+   - Called after decoder state change in both pause and resume
 
-19. What does `thunk_FUN_00eb6dbc()` return?
-    - Result stored in `DAT_008afb08` (minimum over frames)
-    - Called each frame when `DAT_00bef6d7` is set
-    - Available video memory? Frame counter?
+10. What does `FUN_006ace30()`, `FUN_006108c0()`, `FUN_006ac930()` do in RenderAndAudioTeardown?
+    - Three audio/resource teardown calls made sequentially
+    - What each one releases?
 
-20. What is `FUN_00612f00()`?
-    - One-shot initialization with `_atexit(FUN_007b5640)` cleanup
-    - Only called when DAT_00bef6d7 (game update enabled) is set
-    - What system does it initialize?
+11. What does `DAT_00bf1b10` guard in InitAudioSubsystem?
+    - If zero: returns true (no audio) without initializing
+    - Is this a "disable audio" flag set by hardware caps or command line?
 
-21. What is `FUN_0063d600(node)`?
-    - Called in ProcessDeferredCallbacks per node
-    - Returns 1 when node's work is done
-    - What kind of work items are queued? Particle spawning? Animation events?
+## Engine Object System
 
-## Registry and Settings
+12. What is `FUN_00614210` (AllocEngineObject)?
+    - Called as `AllocEngineObject(size, tag_string)` throughout init
+    - Returns a heap pointer, stores vtable + wires things up
+    - Is this a simple malloc wrapper or does it also do vtable setup?
 
-22. Are there additional registry sections beyond `GameSettings`?
-    - The registry path supports any section name
-    - Are there sections like `AudioSettings`, `ControlSettings`?
+13. What is `DAT_00e6b378` (GlobalTempBuffer)?
+    - Used in InitEngineObjects as a temp buffer for something
+    - Field at +0xd = callback count (max 5); pairs at +3 and +4
+    - What are these callback pairs? Render hooks?
 
-23. What is `ReadRegistrySettingStr (FUN_0060ca20)` used for besides placement?
-    - Used for Maximized/Minimized (string comparison to "true")
-    - Are there other string settings?
+14. What is `DAT_00e6b390` (RealGraphSystem)?
+    - Vtable: PTR_FUN_00885010
+    - Field +1 = &DAT_00e6e874 (secondary callback entry)
+    - This is likely the render graph/scene manager
 
-## Missing Analysis
+15. What is `thunk_FUN_00eb87ba()` and `thunk_FUN_00eb88b2()` in InitEngineObjects?
+    - Called after locale and FMV setup respectively
+    - Unknown purpose — could be networking or additional subsystems
 
-24. What initializes the DirectInput devices?
-    - `DAT_00e6a070` (keyboard), `DAT_00e6a194` (mouse), `DAT_00e6a42c` (joysticks)
-    - Where is DirectInput8Create called?
+16. What is `FUN_006677c0()`?
+    - Called at the very end of InitEngineObjects
+    - Unknown — possibly renderer or shader init
 
-25. What is `FUN_0067d2e0` (PreDeviceCheck)?
-    - Called before every TestCooperativeLevel
-    - Likely flushes GPU query or state
+## Message System
 
-26. What is `DAT_00bf1980`?
-    - Compared to 0x10 in InitD3DStateDefaults
-    - If 0x10 (16-bit colour depth?), blend state path changes
+17. What is `thunk_FUN_00eb59ce(dest, msgName, paramType)`?
+    - Used in FinalizeDeviceSetup to register message handlers
+    - How does this message dispatch system work?
+    - Are message IDs looked up by name at runtime?
 
-27. What is `DAT_008ae1fc`?
-    - Checked in CreateGPUSyncQuery: controls swap effect flag
-    - Is this a capability flag from device caps?
+18. What does `FUN_0060c130` do (registered callback in InitGameSubsystems)?
+    - Set as `_DAT_00e69ca0 = FUN_0060c130`
+    - Called when? On what event?
 
-28. What is `FUN_0067ecf0(local_c, 0)` in ReleaseDirectXResources?
-    - Called with a surface pointer before releasing it
-    - Likely unregisters or clears the surface from some cache
+## Scene / Render Mode
+
+19. What are the actual scene ID values in `DAT_00c82b00/08/ac`?
+    - They're set to 0 at startup — what populates them?
+    - When does `DAT_00c82b08 != DAT_00c82ac8`? (triggers render mode change)
+    - Is there an enum of scene types?
+
+20. What does `FUN_006125a0()` do when called from SwitchRenderOutputMode?
+    - Called when `list.head+0x12` pending-change flag is set
+    - Is this a deferred listener flush?
+
+## Timing
+
+21. What is the callback interval (`DAT_00c83190/94`)?
+    - Where is it initialized? What is its default value?
+    - Is it set per-frame or only once at startup?
+
+22. What is `DAT_00bef768` (checked in UpdateFrameTimingPrimary)?
+    - `iVar1 = *(DAT_00bef768 + 4)` is checked before tick accumulation
+    - If 0: updates DAT_00c83114 (tick counter); if non-zero: skips
+    - What controls this flag? A paused/unpaused state?
+
+## Registry / Command Line
+
+23. What happens with the `std::basic_string` parameters in ReadRegistrySetting?
+    - Original allocates temporary std::basic_string objects for each call
+    - This creates/destroys C++ string heap objects on every registry read
+    - The C++ decompilation uses plain const char* — is this close enough functionally?
+
+## Missing Implementations
+
+24. What calls `FUN_0063d600` (BuildRenderBatch / ProcessCallbackNode)?
+    - What types of work items are in the deferred queue?
+    - Are these shader batches, particle emitters, or something else?
+
+25. What does `FUN_0060b740()` do (called in FinalizeDeviceSetup)?
+    - Called after message handler registration
+    - Possible: final renderer state setup or scene graph init
+
+26. What is `DAT_00c8c580` (render dispatch table)?
+    - Used in InitCLIAndTimingAndDevice and FinalizeDeviceSetup
+    - `(*(*DAT_00c8c580))(0, 0)` — initial render dispatch
+    - `(*(*DAT_00c8c580 + 8))()` — second dispatch in FinalizeDeviceSetup
