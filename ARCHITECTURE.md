@@ -844,3 +844,1028 @@ This combination allows:
 - Predictable frame timing (polling loop)
 - Optimized rendering (batching)
 - Non-blocking I/O (async audio)
+
+---
+
+# Iteration 5: Structural Deep Dive and Implementation Details
+
+## Overview
+Iteration 5 focuses on understanding the internal structures of key subsystems, vtable layouts, data structure fields, and implementation specifics that were architectural patterns in Iteration 4. This enables precise C++ implementation with correct field offsets and behavior.
+
+## Engine Object Factory Details
+
+### Engine Root Object Structure (DAT_00bef6d0)
+**Size:** 2904 bytes (0xb58)  
+**Creation:** `(*DAT_00e6e874[0])(0xb58, {0x88332000000001, 0})`  
+**Destruction:** Custom destructor at `callback_mgr + 0xc`
+
+**Purpose:** Central coordinator for all game subsystems
+
+**Magic Number Format: `{0x88332000000001, 0}`**
+- **0x883320:** Likely a version/build stamp or namespace identifier
+- **000001:** Type identifier (object type = 1, the root/factory)
+- **16-byte structure:** Suggests GUID-like type system
+- **Second qword = 0:** Reserved or flags field
+
+**Hypothetical Structure Layout:**
+```cpp
+struct EngineRootObject {
+    void* vtable;                    // +0x00: Virtual function table
+    uint64_t typeID;                 // +0x04: Magic number part 1
+    uint64_t typeFlags;              // +0x0c: Magic number part 2
+    void* subsystemPtrs[100+];       // +0x14+: Pointers to subsystems
+    // ... additional state (total 2904 bytes)
+};
+```
+
+**Known References:**
+- Copied to `DAT_00bf1b18` in PreDirectXInit (audio/render subsystem access)
+- Referenced throughout init for subsystem coordination
+
+### Callback Manager Dual-Entry System
+
+**Primary Entry (DAT_00e6e870):**
+- **Vtable:** `PTR_FUN_00883f3c`
+- **Purpose:** General event dispatch and callback registration
+- **Usage:** Frame callbacks, message handlers
+
+**Secondary Entry (DAT_00e6e874):**
+- **Vtable:** `PTR_FUN_00883f4c`
+- **Purpose:** Factory object creation
+- **Usage:** `(*vtable[0])(size, magic)` → creates typed objects
+
+**Why Dual-Entry?**
+- Separates concerns: events vs. creation
+- Different vtable interfaces for different roles
+- Single manager object with multiple interfaces
+
+**Destruction Protocol:**
+- NOT a simple COM `Release()`
+- Custom destructor callback at `callback_mgr + 0xc`
+- Likely handles subsystem teardown order and cleanup
+
+## Frame Callback System
+
+### Callback Slot Array (DAT_00e6e880)
+**Size:** 0x1c bytes (28 bytes) for 8 slots  
+**Structure:** Array of (function_ptr, context_ptr) pairs
+
+```cpp
+struct CallbackSlot {
+    void (*func)(void* context, ...);
+    void* context;
+};
+
+CallbackSlot g_FrameCallbackSlots[8]; // @ DAT_00e6e880
+```
+
+**Initialization:**
+- Cleared in `InitFrameCallbackSystem` (`00eb8744`)
+- Populated during `InitGameSubsystems`
+- Called each frame by `GameFrameUpdate`
+
+### Frame Callback Table (DAT_008e1644)
+**Primary callback [0]:** Called with `&localTick` parameter  
+**Secondary callback [1]:** Called with no arguments
+
+**Timing Flow:**
+```
+MainLoop → GameFrameUpdate → 
+  → Primary Callback(&localTick) → UpdateFrameTimingPrimary
+  → Secondary Callback() → InterpolateFrameTime
+```
+
+### Game Tick Accumulation (DAT_00c83110)
+**Observation:** Tick counter incremented by `localTick * 3`
+
+**Hypothesis:** Game logic runs at 3x real-time speed internally?
+- **Alternative:** Fixed-point scaling factor (3.0 in some format)
+- **Alternative:** 3 sub-ticks per frame for physics stability
+- **Needs verification:** Check localTick units and usage
+
+## DirectX Device Creation
+
+### CreateD3DDevice Parameters (FUN_0067c290)
+```cpp
+HRESULT CreateD3DDevice(
+    int height,        // param_1: client window height
+    int unknown2,      // param_2: adapter index or behavior flags?
+    int flags1,        // param_3: 0 (reserved?)
+    int flags2,        // param_4: 0 (reserved?)
+    int quality,       // param_5: 6 (default quality/feature level)
+    int flag6,         // param_6: 1 (boolean flag - vsync?)
+    int flag7,         // param_7: 1 (boolean flag - multithreaded?)
+    int flag8,         // param_8: 1 (boolean flag - pure device?)
+    int flag9          // param_9: 1 (boolean flag - hardware vertex processing?)
+);
+```
+
+**Return:** D3DERR codes (checks for `D3DERR_DEVICELOST = -0x7fffbffb`)
+
+**Outputs:**
+- `DAT_00bf1920` = `IDirect3DDevice9*` pointer
+- `DAT_00bf1924` = `IDirect3D9*` or swap chain pointer
+
+**Quality Parameter (6):**
+- Likely maps to feature/shader model level
+- Related to `g_nShaderCapabilityLevel` (DAT_00bf1994)
+
+### Shader Capability Level (DAT_00bf1994)
+**Usage in RestoreDirectXResources:**
+```cpp
+if (g_nShaderCapabilityLevel > 2) {
+    // Extended shader path (likely Shader Model 2.0+)
+} else {
+    // Basic shader path (Shader Model 1.x)
+}
+```
+
+**Determination:**
+- Set from D3D device caps query (`GetDeviceCaps`)
+- Maps to DirectX shader model versions: 1.1, 1.4, 2.0, 3.0
+
+**Impact:**
+- Render quality settings
+- Shader compilation paths
+- Effect availability
+
+### DirectX Resource Management Protocol
+
+**Pre-Release Notification (FUN_00ec04dc):**
+```
+Called BEFORE surface releases
+→ Notify render pipeline of impending loss
+→ Flush pending draw calls
+→ Clear command buffers
+→ Save state for restoration
+```
+
+**Post-Release Cleanup (FUN_00ec19b5):**
+```
+Called AFTER surface releases
+→ Clean up dependent resources
+→ Clear texture caches
+→ Reset shader states
+→ Update internal tracking
+```
+
+**Pattern:** Pre/post hooks enable graceful resource transitions during device reset
+
+## Audio System Architecture
+
+### Audio Command Queue (DAT_00be82ac)
+**Purpose:** Asynchronous audio operation queue  
+**Thread:** Audio worker thread (DAT_00bf1b30) processes commands  
+**Polling:** `AudioPollGate` (FUN_006109d0) checks status
+
+**Command Queue Structure (Hypothetical):**
+```cpp
+enum AudioCommandType {
+    AUDIO_CMD_OPEN_DEVICE = 1,
+    AUDIO_CMD_QUERY_CAPS = 2,
+    AUDIO_CMD_CONFIGURE = 3,
+    AUDIO_CMD_START_STREAM = 4,
+    AUDIO_CMD_STOP_STREAM = 5,
+    // ...
+};
+
+struct AudioCommand {
+    AudioCommandType opcode;
+    void* params;
+    void (*callback)(int status);
+    int status;  // -2=error, 0=pending, 1=complete
+};
+
+struct AudioCommandQueue {
+    AudioCommand commands[MAX_COMMANDS];
+    int head;
+    int tail;
+    CRITICAL_SECTION lock;
+};
+```
+
+**Async Initialization Flow:**
+```
+1. PreDirectXInit:
+   - Create audio thread → DAT_00bf1b30
+   - Queue OPEN_DEVICE command
+   
+2. InitAudioSubsystem:
+   - Poll AudioPollGate() until status != 0
+   - Queue QUERY_CAPS command (expects 0x80 return)
+   - Poll again
+   - Queue CONFIGURE command
+   - Poll again
+   - Queue START command
+   - Final poll
+   
+3. On error (status == -2):
+   - Skip audio init
+   - Continue without sound
+```
+
+**Benefits:**
+- Non-blocking initialization
+- Responsive UI during audio setup
+- Graceful fallback on failure
+
+### Audio Decoder Control
+
+**SetAudioDecoderState (FUN_00ec693d):**
+```cpp
+void SetAudioDecoderState(int rate) {
+    // 0 = stop playback
+    // 0x1000 = normal playback (100%, no pitch shift)
+}
+```
+
+**CommitAudioStateChange (FUN_00ec66f1):**
+```cpp
+void CommitAudioStateChange() {
+    // Flush DirectSound buffers
+    // Update hardware state
+    // Commit changes to audio device
+}
+```
+
+**Usage Pattern:**
+```cpp
+// Pause
+SetAudioDecoderState(0);
+CommitAudioStateChange();
+
+// Resume
+SetAudioDecoderState(0x1000);
+CommitAudioStateChange();
+```
+
+**0x1000 Constant:**
+- Likely DirectSound frequency multiplier
+- Normal playback = 0x1000 (4096 decimal)
+- Matches DirectSound DSBFREQUENCY_ORIGINAL or pitch scale format
+
+### Audio Teardown Sequence
+
+**Three-step shutdown:**
+```
+1. StopAllAudioStreams (FUN_006ace30)
+   → Stop all active tracks
+   → Prevent new playback
+   
+2. ReleaseAudioBuffers (FUN_006108c0)
+   → Release DirectSound buffers
+   → Free secondary resources
+   
+3. CloseAudioDevice (FUN_006ac930)
+   → Close device handle
+   → Release DirectSound interface
+   → Terminate audio thread
+```
+
+**Rationale:** Stop → Release → Close ensures clean shutdown without crashes
+
+### Audio Hardware Detection (DAT_00bf1b10)
+```cpp
+bool g_bAudioHardwarePresent; // DAT_00bf1b10
+
+// Set by hardware detection
+if (DetectAudioHardware()) {
+    g_bAudioHardwarePresent = true;
+    InitAudioSubsystem();
+} else {
+    g_bAudioHardwarePresent = false;
+    // Skip audio init, silent mode
+}
+```
+
+**Purpose:** Allows headless or server operation without audio device
+
+## Message Dispatch Implementation
+
+### String-Based Polymorphic Dispatch
+
+**Registration:**
+```cpp
+void RegisterMessageHandler(void* dest, const char* msgName, int paramType) {
+    uint32_t msgID = HashString(msgName);  // Hash to ID
+    g_MessageDispatchTable.insert({msgID, {handler_func, dest, paramType}});
+}
+```
+
+**Dispatch:**
+```cpp
+void DispatchMessage(uint32_t msgID, void* params) {
+    auto entry = g_MessageDispatchTable.find(msgID);
+    if (entry != end) {
+        entry->handler(entry->dest, params);
+    }
+}
+```
+
+**Message Naming Convention:**
+- **Prefix "iMsg":** Interface messages (polymorphic dispatch)
+- Examples: "iMsgDeleteEventHandler", "iMsgDoRender", etc.
+
+**paramType Parameter:**
+- Type descriptor for message payload
+- Used for validation/marshalling
+- Enables type-safe message passing
+
+**Benefits:**
+- Decoupled communication
+- Data-driven event system
+- Runtime registration/unregistration
+- Easy debugging (string names in memory)
+
+**Hash Algorithm Candidates:**
+- CRC32 (common in game engines)
+- FNV-1a (fast, good distribution)
+- Custom hash (needs disassembly analysis)
+
+**Question for Exploration:** Is there a reverse lookup table (ID → name) for debugging?
+
+## Scene Management System
+
+### Three-ID Scene System
+
+**Scene IDs:**
+```cpp
+int g_SceneID_FocusLost;  // DAT_00c82b00 - Menu/pause screen
+int g_SceneID_FocusGain;  // DAT_00c82b08 - Active gameplay  
+int g_SceneID_Current;    // DAT_00c82ac8 - Current target scene
+```
+
+**Initialization:** All set to 0 at startup  
+**Population:** Loaded from level data or scripting during `InitGameSubsystems`
+
+**Hypothetical Scene Type Enum:**
+```cpp
+enum SceneType {
+    SCENE_NONE = 0,
+    SCENE_MAIN_MENU = 1,
+    SCENE_PAUSE_MENU = 2,
+    SCENE_GAMEPLAY = 3,
+    SCENE_CUTSCENE = 4,
+    SCENE_LOADING = 5,
+    // ...
+};
+```
+
+### Scene Switching Protocol
+
+**Trigger:** `UpdateCursorVisibilityAndScene` compares scene IDs
+
+**Flow:**
+```
+1. Check if g_SceneID_Current != g_SceneID_FocusLost/Gain
+2. If different:
+   → Call SwitchRenderOutputMode(newSceneID)
+   
+3. SwitchRenderOutputMode:
+   → Check pending-change flag at listener_list.head+0x12
+   → If flag set:
+       → Call FlushDeferredSceneListeners (FUN_006125a0)
+   → Iterate listener list, call callbacks
+   → Set new render mode
+```
+
+**Pending-Change Flag:**
+- **Purpose:** Defers scene switch until safe point
+- **Use cases:**
+  - Async scene loading
+  - Prevent recursive switches
+  - Wait for render queue flush
+
+**Listener Registration:**
+- **Pattern:** Observer pattern
+- **Callbacks:** `void (*)(int newSceneID)`
+- **Priority:** Likely supports ordered notification
+
+## Deferred Render Queue
+
+### Render Batch Node Structure
+
+**Linked List:** Head at `DAT_00bef7c0`  
+**Node Structure (Hypothetical):**
+```cpp
+struct RenderBatchNode {
+    // ... shader params, material ID, etc. ...
+    void* geometry;           // Vertex/index data
+    uint32_t shaderTypeHash;  // BLOOM, GLASS, BACKDROP
+    Matrix4x4 transform;
+    Material* material;
+    // ... (unknown fields) ...
+    RenderBatchNode* next;    // +0x7c: Next pointer
+};
+```
+
+**Shader Type Recognition:**
+- Likely hash-based: `Hash("BLOOM")`, `Hash("GLASS")`, etc.
+- Could be enum comparison
+- Metadata stored with shader compilation
+
+**Known Shader Types:**
+- **BLOOM:** Post-processing glow effect
+- **GLASS:** Transparent/refractive materials
+- **BACKDROP:** Environment/skybox rendering
+- **Others:** Likely OPAQUE, ALPHA_BLEND, SHADOW_CAST, etc.
+
+### ProcessDeferredCallbacks Time Budget
+
+**Budget:** 2ms per frame
+
+**Why 2ms?**
+- **60 FPS target:** 16.67ms per frame total
+- **Breakdown estimate:**
+  - 10ms: Game logic, AI, physics
+  - 2ms: Deferred callback processing (batching)
+  - 4ms: Actual D3D rendering
+  - 0.67ms: Buffer for variance
+  
+**On Budget Exceeded:**
+- **Likely:** Continue next frame (spread over multiple frames)
+- **Alternative:** Drop batches (degrades quality)
+- **Alternative:** Log warning for profiling
+
+**Time Measurement:**
+- Likely `QueryPerformanceCounter` (high precision)
+- Could use `GetGameTime` (game-time, respects pause)
+
+## Subsystem Structures
+
+### GlobalTempBuffer (DAT_00e6b378)
+
+**Size:** 0x3c bytes (60 bytes)
+
+**Structure (Hypothetical):**
+```cpp
+struct GlobalTempBuffer {
+    uint8_t unknown_header[3];        // +0x00
+    void* callback_funcs[5];          // +0x03 (assuming byte-aligned)
+    void* callback_contexts[5];       // +0x17 (5 ptrs * 4 bytes)
+    uint8_t callback_count;           // +0x0d: Current count (max 5)
+    uint8_t additional_data[...];     // Fill to 0x3c
+};
+```
+
+**Purpose:**
+- **Temp storage:** Per-frame callback registration
+- **Deferred commands:** Scratch buffer for render commands
+- **Max 5 callbacks:** Small fixed-size for performance
+
+**Usage Pattern:**
+- Register callbacks during frame processing
+- Invoke at safe point (e.g., end of frame)
+- Clear for next frame
+
+### RealGraphSystem (DAT_00e6b390)
+
+**Size:** 8 bytes
+
+**Structure:**
+```cpp
+struct RealGraphSystem {
+    void* vtable;                // +0x00: PTR_FUN_00885010
+    void* callback_mgr_secondary; // +0x04: &DAT_00e6e874
+};
+```
+
+**Purpose:**
+- Render graph/scene manager
+- **"Real"** suggests actual implementation (vs. interface/proxy)
+- Small size (8 bytes) indicates thin wrapper
+
+**Connection to Callback System:**
+- Field +4 points to secondary callback entry
+- Likely uses factory for creating render nodes
+
+**Hypothetical Vtable:**
+```cpp
+void* RealGraphSystem_vtable[] = {
+    &RealGraphSystem_AddNode,
+    &RealGraphSystem_RemoveNode,
+    &RealGraphSystem_Traverse,
+    &RealGraphSystem_Render,
+    // ...
+};
+```
+
+### Locale System (DAT_00e6b304)
+
+**Size:** 0x8c bytes (140 bytes)
+
+**Purpose:**
+- Localization/language system
+- String table lookup
+- Runtime language switching
+
+**Supported Languages (Typical EA game):**
+- English (EN)
+- French (FR)
+- German (DE)
+- Spanish (ES)
+- Italian (IT)
+
+**Structure (Hypothetical):**
+```cpp
+struct Locale {
+    void* vtable;
+    char current_language[4];  // "EN", "FR", etc.
+    void* string_tables[5];    // One per language
+    uint32_t string_count;
+    // ... additional data to fill 140 bytes
+};
+```
+
+**String Table Format:**
+- Likely ID → String map
+- Hash-based lookup for performance
+- Loaded from external files (.loc, .lang, etc.)
+
+**InitLanguageResources (FUN_00eb87ba):**
+- Called after Locale setup
+- Loads string tables from disk
+- Likely initializes font system for localized glyphs
+
+### FMV Subsystem (DAT_00e6b2dc)
+
+**Size:** 0x18 bytes (24 bytes)
+
+**Structure:**
+```cpp
+struct FMVSubsystem {
+    void* vtable;
+    void* decoder_context;  // Bink/Smacker decoder
+    bool is_initialized;
+    bool playback_active;
+    // ... (fill to 24 bytes)
+};
+```
+
+**Codec Candidates:**
+- **Bink:** Common EA codec (RAD Game Tools)
+- **Smacker:** Older RAD codec
+- **Custom:** In-house solution
+
+**'nofmv' Flag:**
+- Skips FMV initialization
+- **What happens to cutscenes?**
+  - Skip and advance story
+  - Show static screen
+  - Load pre-rendered images
+
+**Audio Integration:**
+- Video playback needs audio sync
+- Likely connects to `g_pAudioCommandQueue` for audio track
+
+### GameServices Singleton (DAT_00e6b2c8)
+
+**Size:** 1 byte (just vtable pointer)
+
+**Purpose:** Service locator pattern
+
+**Hypothetical Vtable:**
+```cpp
+void* GameServices_vtable[] = {
+    &GameServices_GetAudioManager,
+    &GameServices_GetRenderer,
+    &GameServices_GetPhysicsEngine,
+    &GameServices_GetInputSystem,
+    &GameServices_GetScriptEngine,
+    &GameServices_GetNetworkManager,
+    // ...
+};
+```
+
+**Usage:**
+```cpp
+AudioManager* audio = g_pGameServices->vtable->GetAudioManager();
+Renderer* renderer = g_pGameServices->vtable->GetRenderer();
+```
+
+**Benefits:**
+- Centralized subsystem access
+- Decouples initialization order
+- Easy mocking for tests
+
+### TimeManager Singleton (DAT_00bef768)
+
+**Size:** 8 bytes
+
+**Structure:**
+```cpp
+struct TimeManager {
+    void* vtable;       // +0x00
+    bool isPaused;      // +0x04 (checked as != 0)
+};
+```
+
+**Pause Behavior:**
+```cpp
+void UpdateFrameTimingPrimary(int* localTick) {
+    if (g_pTimeManager->isPaused == 0) {
+        g_dwGameTicks += (*localTick) * 3;
+        // Continue timing updates
+    } else {
+        // Skip tick accumulation
+        // Time still advances, but game ticks freeze
+    }
+}
+```
+
+**Pause Triggers:**
+- Pause menu
+- Cutscenes (optional)
+- Alt-tab / focus loss (optional)
+- Loading screens (likely separate mechanism)
+
+## Memory Management
+
+### AllocEngineObject (FUN_00614210)
+
+**Signature:**
+```cpp
+void* AllocEngineObject(size_t size, const char* tagName);
+```
+
+**Features:**
+1. **Debug Tagging:** Tag string stored with allocation
+2. **Tracking:** Memory usage stats per tag
+3. **Leak Detection:** Tag aids in finding leaks
+4. **Profiling:** Per-subsystem memory usage
+
+**Usage Examples:**
+```cpp
+CLI::CommandParser* parser = (CLI::CommandParser*)
+    AllocEngineObject(0xc, "CLI::CommandParser");
+    
+RenderBatch* batch = (RenderBatch*)
+    AllocEngineObject(0x100, "RenderBatch");
+```
+
+**Hypothetical Implementation:**
+```cpp
+struct AllocHeader {
+    const char* tag;
+    size_t size;
+    AllocHeader* next;  // For leak tracking list
+    uint32_t magic;     // Corruption detection
+};
+
+void* AllocEngineObject(size_t size, const char* tag) {
+    AllocHeader* header = (AllocHeader*)malloc(sizeof(AllocHeader) + size);
+    header->tag = tag;
+    header->size = size;
+    header->magic = 0xDEADBEEF;
+    
+    // Add to global tracking list
+    AddToAllocList(header);
+    
+    // Update stats
+    g_MemoryStatsByTag[tag] += size;
+    
+    return (void*)(header + 1);  // Return pointer after header
+}
+```
+
+**Integration with QueryMemoryAllocatorMax:**
+- Tracks peak memory usage
+- Used with 'memorylwm' flag for low-water-mark monitoring
+
+**Type Registry (Speculation):**
+- Could map tag strings to vtables
+- Enables automatic vtable setup: `AllocEngineObject(size, "ClassName")`
+
+### Memory Allocator Internals
+
+**Free List (allocator + 0x428):**
+- **0xfe entries (254):** Size class buckets
+- **8-byte alignment:** Mask `& 0x7ffffff8`
+- **Likely:** Segregated free list allocator
+  - Each bucket stores free blocks of similar size
+  - Fast allocation: O(1) lookup by size class
+  - Reduced fragmentation
+
+**Critical Section (allocator + 0x4e4):**
+- **Protection:** Free list modifications
+- **Thread-safety:** Multiple threads can allocate
+- **Shared Allocator:** Used by audio thread, render thread, main thread
+
+**Structure (Hypothetical):**
+```cpp
+struct EngineAllocator {
+    // ... (unknown fields up to +0x428)
+    FreeBlock* free_lists[254];      // +0x428: Size class buckets
+    // ... (unknown fields up to +0x4e4)
+    CRITICAL_SECTION lock;           // +0x4e4: Thread-safe access
+};
+```
+
+## Timing and Frame Management
+
+### Callback Interval (DAT_00c83190/94)
+
+**Format:** 64-bit 16.16 fixed-point
+
+**Likely Values:**
+- **60 FPS:** 16.67ms → `16 << 16 = 0x00000000_00100000`
+- **30 FPS:** 33.33ms → `33 << 16 = 0x00000000_00210000`
+
+**Initialization:**
+- Set in `InitFrameCallbackSystem` or first `GameFrameUpdate`
+- Remains constant throughout execution
+
+**Usage:**
+```cpp
+ULONGLONG interval = MAKE_ULONGLONG(g_ullCallbackInterval_lo, g_ullCallbackInterval_hi);
+g_ullNextCallback += interval;
+```
+
+### Frame Time Interpolation
+
+**Purpose:** Smooth rendering between frame updates
+
+**Pattern:**
+```cpp
+// Double-buffered state
+float positions[2];  // [previous, current]
+
+void UpdateFrameTimingPrimary(int* localTick) {
+    positions[0] = positions[1];  // Save previous
+    positions[1] += velocity * deltaTime;  // Update current
+}
+
+void InterpolateFrameTime() {
+    float alpha = CalculateInterpolationFactor();
+    float smoothPos = lerp(positions[0], positions[1], alpha);
+    // Use smoothPos for rendering
+}
+```
+
+**Benefits:**
+- Eliminates stuttering
+- Decouples simulation rate from render rate
+- Responsive visuals even with variable frame time
+
+## Input System
+
+### RealInputSystem (DAT_00e6b384)
+
+**Size:** 0x34 bytes (52 bytes)
+
+**Structure (Hypothetical):**
+```cpp
+struct RealInputSystem {
+    void* vtable;                     // +0x00
+    IDirectInput8* pDirectInput;      // +0x04
+    IDirectInputDevice8* pKeyboard;   // +0x08
+    void* pDeviceManager;             // +0x0c: Sub-object for device enumeration
+    InputEvent eventQueue[16];        // +0x10: Buffered events
+    int eventCount;                   // +0x30
+};
+```
+
+**Field +0xc:** Device manager sub-object
+- Handles DirectInput device enumeration
+- Manages joystick hotplug
+- Coordinates device acquisition/unacquisition
+
+**Event Queue:**
+- Buffers input for frame-based processing
+- Prevents losing inputs on slow frames
+
+### Custom Cursor Control (Ordinal_5)
+
+**Function:** `Ordinal_5(int show)` (imported from DLL)
+
+**Usage:**
+```cpp
+Ordinal_5(0);  // Hide custom cursor
+Ordinal_5(1);  // Show custom cursor
+```
+
+**Different from ShowCursor:**
+- **ShowCursor:** System cursor visibility
+- **Ordinal_5:** Game-specific cursor rendering
+
+**Implementation Possibilities:**
+- **D3D hardware cursor:** `IDirect3DDevice9::SetCursorProperties`
+- **Custom sprite:** Render cursor texture at mouse position
+- **Integration:** Both system and game cursor coordination
+
+## Configuration and Registry
+
+### Aspect Ratio Calculation (DAT_008ae1dc)
+
+**Set by:** 'widescreen' command-line flag
+
+**Values:**
+- **4:3:** 1.333... (standard)
+- **16:9:** 1.777... (widescreen)
+- **16:10:** 1.6 (widescreen alternative)
+
+**Usage:**
+```cpp
+if (fullscreen && widthSpecified) {
+    int height = (int)round(width / g_AspectRatio);
+    CreateWindow(..., width, height, ...);
+}
+```
+
+**Storage Format:**
+- Could be float/double
+- Could be fixed-point
+- Needs verification from disassembly
+
+### std::basic_string in Registry Code
+
+**MSVC 2005 std::string:**
+```cpp
+struct std_string {
+    char* ptr;          // +0x00: Pointer to string data (or SSO buffer)
+    size_t size;        // +0x04: String length
+    size_t capacity;    // +0x08: Allocated capacity
+    char sso[16];       // Embedded small string optimization
+};
+// Size: 24 bytes (typical MSVC 2005)
+```
+
+**SSO Threshold:** 15 characters (16 including null terminator)
+
+**Why C++ strings in C-style API?**
+- **Internal consistency:** All string handling uses std::string
+- **Exception safety:** RAII for cleanup
+- **Convenience:** Easier concatenation and manipulation
+
+**Registry Wrapper:**
+```cpp
+void ReadRegistrySetting(std::basic_string<char>& key, ...) {
+    // Convert to C-string for WinAPI
+    const char* keyName = key.c_str();
+    RegQueryValueExA(..., keyName, ...);
+}
+```
+
+## Performance and Optimization
+
+### Memory Low-Water Mark Tracking
+
+**Flags:**
+- **DAT_00bef6d7:** Enable tracking (set by 'memorylwm')
+- **DAT_008afb08:** Current low-water mark value
+
+**Purpose:**
+- Track minimum available memory during gameplay
+- Detect memory pressure situations
+- Make quality/scaling decisions
+
+**Usage:**
+```cpp
+if (g_bMemoryLowWaterMark) {
+    SIZE_T current = QueryAvailableMemory();
+    if (current < g_LowWaterMarkValue) {
+        g_LowWaterMarkValue = current;
+    }
+}
+```
+
+**Thresholds:**
+```cpp
+if (availableMB > 33) {
+    // Normal operation
+} else if (availableMB > 0) {
+    HandleLowTextureMemory();  // FUN_00ebe85b
+} else {
+    // Critical: crash imminent
+}
+```
+
+**Low Texture Memory Handler (FUN_00ebe85b):**
+- Reduce texture quality (drop mip levels)
+- Flush texture caches
+- Show warning dialog to user
+- Attempt to free memory
+
+### ShowFPS Flag (DAT_00bef754)
+
+**Set by:** 'showfps' command-line argument
+
+**Implementation:**
+```cpp
+if (g_bShowFPS) {
+    RenderFPSOverlay(currentFPS);
+}
+```
+
+**FPS Calculation:**
+- Likely rolling average over 60-120 frames
+- Updated each frame
+- Rendered as text overlay (D3DXFont or custom)
+
+## Build and Debug Information
+
+### Debug Sentinel (DAT_008d3878)
+
+**Pattern:** 0xcd repeated for 0x4c bytes (76 bytes)
+
+**MSVC Debug Heap Patterns:**
+- **0xcd:** Clean memory (uninitialized)
+- **0xdd:** Dead memory (freed)
+- **0xfd:** Fence memory (guard bytes)
+
+**Purpose:**
+- Detect uninitialized reads
+- Catch buffer overruns
+- Debug builds only (stripped in release)
+
+**Usage:**
+```cpp
+#ifdef _DEBUG
+static uint8_t g_DebugSentinel[76];
+memset(g_DebugSentinel, 0xcd, sizeof(g_DebugSentinel));
+
+// Later...
+if (g_DebugSentinel[0] != 0xcd) {
+    // Corruption detected!
+}
+#endif
+```
+
+### Visual Studio Version Detection
+
+**Evidence:**
+- `__tmainCRTStartup` entry point
+- std::basic_string size and layout
+- Exception handling conventions
+
+**Likely Version:** Visual Studio 2005 (VC8)
+- DirectX 9 era
+- CRT signature matches
+- String object size consistent
+
+**Confirmation Methods:**
+- Check PE rich header
+- Analyze CRT function signatures
+- Compare vtable layouts to known versions
+
+## Next Steps for C++ Implementation
+
+Based on Iteration 5 findings, the following should be implemented in `decompilation-src/main.cpp`:
+
+1. **Frame Callback Infrastructure:**
+   ```cpp
+   struct CallbackSlot {
+       void (*func)(void*, ...);
+       void* context;
+   };
+   CallbackSlot g_FrameCallbackSlots[8];
+   ```
+
+2. **Message Dispatch System:**
+   ```cpp
+   std::unordered_map<uint32_t, MessageHandler> g_MessageDispatchTable;
+   void RegisterMessageHandler(void* dest, const char* msgName, int paramType);
+   void DispatchMessage(uint32_t msgID, void* params);
+   ```
+
+3. **Scene Management:**
+   ```cpp
+   int g_SceneID_FocusLost = 0;
+   int g_SceneID_FocusGain = 0;
+   int g_SceneID_Current = 0;
+   void SwitchRenderOutputMode(int newSceneID);
+   ```
+
+4. **Deferred Render Queue:**
+   ```cpp
+   struct RenderBatchNode {
+       // ... fields ...
+       RenderBatchNode* next;
+   };
+   RenderBatchNode* g_pDeferredRenderQueue = nullptr;
+   void BuildRenderBatch();
+   ```
+
+5. **Audio Command Queue:**
+   ```cpp
+   struct AudioCommand { /* ... */ };
+   std::queue<AudioCommand> g_AudioCommandQueue;
+   HANDLE g_hAudioThread;
+   int AudioPollGate();  // Returns -2/0/1
+   ```
+
+6. **Subsystem Structures:**
+   ```cpp
+   struct GlobalTempBuffer { /* ... */ };
+   struct RealGraphSystem { /* ... */ };
+   struct Locale { /* ... */ };
+   // Allocate and initialize
+   ```
+
+7. **Memory Allocator:**
+   ```cpp
+   void* AllocEngineObject(size_t size, const char* tag);
+   void FreeEngineObject(void* ptr);
+   ```
+
+These implementations will bring the C++ decompilation closer to the original architecture and behavior.
