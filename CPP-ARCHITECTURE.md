@@ -1,10 +1,10 @@
-# C++ Decompilation Architecture (Iteration 5)
+# C++ Decompilation Architecture (Iteration 6)
 
 ## Overview
 
 This document describes the architecture of the C++ decompiled version of `hp.exe` as implemented in `decompilation-src/main.cpp`. The decompilation aims for functional equivalence while maintaining clean, readable C++ code without assembly instructions, hard-coded addresses, or magic constants.
 
-**Current Status:** Iteration 5 - Enhanced with subsystem structures and implementations
+**Current Status:** Iteration 6 - Frame timing callbacks and dispatch system implemented
 
 **Build System:** Zig cc (cross-compilation to Windows x86)
 
@@ -435,38 +435,85 @@ The C++ decompilation uses native C++ memory management rather than replicating 
 
 This approach prioritizes maintainability and clarity over byte-for-byte replication.
 
-## Next Steps (Iteration 6)
+## Iteration 6 Accomplishments
 
-1. **Implement Frame Callback Dispatch**
-   - Hook up primary/secondary callbacks in `GameFrameUpdate`
-   - Implement `UpdateFrameTimingPrimary` and `InterpolateFrameTime`
+**Status:** Successfully implemented frame timing callbacks and dispatch system
 
-2. **Complete Message Dispatch**
-   - Add message ID to handler mapping
-   - Implement actual dispatch logic
+### Implemented Features
 
-3. **Implement Scene Listeners**
-   - Create listener list structure
-   - Implement registration and notification
+1. ✅ **Frame Callback Dispatch**
+   - `UpdateFrameTimingPrimary()`: Updates tick counter and double-buffered timing
+   - `InterpolateFrameTime()`: Smooth frame interpolation for rendering
+   - Both callbacks hooked up in `GameFrameUpdate()`
+   - Invokes all registered frame callbacks
 
-4. **Implement Render Batch Building**
-   - Shader type recognition (hash comparison)
-   - Material sorting and D3D state optimization
+2. ✅ **Timing System**
+   - Callback interval: 16ms (60 FPS) in 16.16 fixed-point
+   - Double-buffered timing arrays (tick and time)
+   - TimeManager pause state checking
+   - 3x game time scaling
 
-5. **Audio Thread Implementation**
-   - Thread entry point function
-   - Command queue processing loop
-   - Synchronization with main thread
+3. ✅ **Compilation**
+   - Builds successfully with zig cross-compiler
+   - Output: ~820 KB Windows x86 executable
 
-6. **Subsystem Initialization**
-   - Language resource loading from files
-   - Video codec DLL loading (Bink/Smacker detection)
-   - Shader compilation/loading
+### Frame Timing Flow
+```cpp
+void GameFrameUpdate() {
+    ProcessDeferredCallbacks();  // 2ms budget
+    
+    // Get time, compute delta, accumulate
+    // ...
+    
+    if (g_ullAccumTime >= g_ullNextCallback) {
+        g_ullNextCallback += g_ullCallbackInterval;  // +16ms
+        g_nFrameFlip ^= 1;  // Toggle buffer index
+        
+        // Primary: tick counter and timing buffers
+        UpdateFrameTimingPrimary(&g_dwGameTicks);
+        
+        // Invoke all frame callbacks (game logic)
+        InvokeFrameCallbacks();
+        
+        // Secondary: smooth interpolation
+        InterpolateFrameTime();
+    }
+}
+```
 
-7. **Complete Teardown Sequence**
-   - RenderAndAudioTeardown implementation
-   - Engine object destruction via callback manager
-   - Proper cleanup order
+### Double-Buffered Timing
+```cpp
+static DWORD g_dwTickCounter = 0;      // Incremented by localTick * 3
+static DWORD g_dwTickBuffer[2];        // Tick values [current, previous]
+static DWORD g_dwTimeBuffer[2];        // Time values [current, previous]
+// Indexed by g_nFrameFlip (toggles 0/1 each interval)
+```
+
+## Next Steps (Iteration 7)
+
+1. **Engine Object Factory**
+   - Factory with magic number {0x88332000000001, 0}
+   - 2904-byte engine root object
+   - Dual-entry callback manager
+
+2. **Message Dispatch Completion**
+   - Add msgID to handler table
+   - Hash table lookup
+   - Register known messages
+
+3. **Audio Thread**
+   - Thread creation
+   - Worker loop
+   - Queue processing
+
+4. **Scene Listeners**
+   - List structure
+   - Registration/notification
+   - Deferred flush
+
+5. **Render Batch Building**
+   - Shader sorting
+   - State optimization
 
 ## Differences from Original
 

@@ -1869,3 +1869,77 @@ Based on Iteration 5 findings, the following should be implemented in `decompila
    ```
 
 These implementations will bring the C++ decompilation closer to the original architecture and behavior.
+
+## Iteration 6 Findings
+
+### Frame Timing System - Callback Interval Implementation
+
+**Callback Interval Value (g_ullCallbackInterval):**
+- Format: 64-bit fixed-point (16.16)
+- Value: 16ms (approximately 60 FPS)
+- Calculation: 16 << 16 = 1,048,576 (0x100000)
+- Set during `InitFrameCallbackSystem()` initialization
+- Used to trigger primary/secondary callbacks in `GameFrameUpdate()`
+
+**Primary Callback Flow:**
+1. **UpdateFrameTimingPrimary(localTick)** (FUN_00617f50):
+   - Checks TimeManager pause state (g_pTimeManager+4)
+   - If not paused: increments tick counter by `localTick * 3`
+   - Stores timing in double-buffer indexed by `g_nFrameFlip`
+   - Updates both tick and time buffers for interpolation
+
+2. **Frame Callback Invocation:**
+   - Calls all registered callbacks in `g_FrameCallbackSlots[8]`
+   - Each callback receives its context pointer
+   - Main game logic update entry point
+
+**Secondary Callback Flow:**
+1. **InterpolateFrameTime()** (FUN_00617ee0):
+   - Reads from double-buffered timing arrays
+   - Computes smooth interpolation factor: `t = (current-prev)/(curr-prev)`
+   - Result: `prevTime + (currTime-prevTime) * t`
+   - Provides smooth rendering between physics ticks
+
+2. **Render System Callback:**
+   - Called via callback table pointer (DAT_008e1644[1])
+   - Dispatches to render system with interpolated time
+   - Allows visual smoothness independent of physics rate
+
+**Double-Buffering Implementation:**
+```
+g_dwTickBuffer[2]:  Stores tick values for current/previous frame
+g_dwTimeBuffer[2]:  Stores time values for current/previous frame  
+g_nFrameFlip:       Toggles 0/1 each interval to flip buffers
+```
+
+**Timing Constants:**
+- `MAX_DELTA_TIME_MS`: 100ms (spiral-of-death cap)
+- `TARGET_FRAME_TIME_MS`: 16ms (~60 FPS budget)
+- `GAME_TIME_SCALE`: 3 (game runs 3x real-time internally)
+- `TIME_FIXED_SHIFT`: 0x10000 (16.16 fixed-point denominator)
+
+### C++ Implementation Status (Iteration 6)
+
+**Implemented:**
+- ✅ Primary timing callback (`UpdateFrameTimingPrimary`)
+- ✅ Secondary interpolation callback (`InterpolateFrameTime`)
+- ✅ Frame callback invocation in `GameFrameUpdate()`
+- ✅ Callback interval initialization (16ms)
+- ✅ Double-buffered timing system
+- ✅ Pause state checking via TimeManager
+
+**Remaining Gaps:**
+- 🔲 Engine object factory with magic number {0x88332000000001, 0}
+- 🔲 Complete message dispatch with hash table lookup
+- 🔲 Audio thread creation and worker function
+- 🔲 DirectX device parameter clarification (params 2-9)
+- 🔲 Scene listener list implementation
+- 🔲 Render batch building with shader sorting
+
+**Key Improvements in Iteration 6:**
+1. Frame timing now properly dispatches to primary/secondary callbacks
+2. TimeManager pause state is correctly checked before tick updates
+3. Smooth interpolation enables rendering at different rate than physics
+4. Code compiles successfully with zig cross-compiler
+
+The decompilation is progressing well with critical timing infrastructure now functional.

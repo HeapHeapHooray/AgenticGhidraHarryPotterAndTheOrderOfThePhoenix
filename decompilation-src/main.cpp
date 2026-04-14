@@ -692,6 +692,60 @@ DWORD GetGameTime() {
     return t - g_dwStartupTime;
 }
 
+// ── Iteration 6: Primary and Secondary Timing Callbacks ──────────────────────
+
+// DAT_00c83114: tick counter
+// DAT_00c83128: double-buffered tick values [2]
+// DAT_00c83120: double-buffered time values [2]
+static DWORD g_dwTickCounter = 0;
+static DWORD g_dwTickBuffer[2] = {0, 0};
+static DWORD g_dwTimeBuffer[2] = {0, 0};
+
+void UpdateFrameTimingPrimary(DWORD* localTick) {
+    // FUN_00617f50: Called when accumulated time exceeds callback interval
+    // Stores timing in double-buffer indexed by g_nFrameFlip
+    
+    // Only update tick counter if TimeManager is not paused
+    if (g_pTimeManager && g_pTimeManager->isPaused == 0) {
+        // Increment tick counter by localTick * 3
+        g_dwTickCounter += (*localTick) * 3;
+    }
+    
+    // Store timing in double-buffer using current flip index
+    g_dwTickBuffer[g_nFrameFlip] = *localTick;
+    g_dwTimeBuffer[g_nFrameFlip] = GetGameTime();
+}
+
+void InterpolateFrameTime() {
+    // FUN_00617ee0: Smooth interpolation between double-buffered frame values
+    // Formula: result = prevTime + (currTime - prevTime) * t
+    // where t = (currentTick - prevTick) / (currTick - prevTick)
+    
+    int prevFlip = g_nFrameFlip ^ 1;  // Toggle to get previous buffer
+    int currFlip = g_nFrameFlip;
+    
+    DWORD prevTick = g_dwTickBuffer[prevFlip];
+    DWORD currTick = g_dwTickBuffer[currFlip];
+    DWORD prevTime = g_dwTimeBuffer[prevFlip];
+    DWORD currTime = g_dwTimeBuffer[currFlip];
+    
+    // Avoid division by zero
+    if (currTick == prevTick) return;
+    
+    // Calculate interpolation factor (simplified)
+    DWORD currentTick = GetGameTime();
+    float t = (float)(currentTick - prevTick) / (float)(currTick - prevTick);
+    
+    // Clamp t to [0.0, 1.0]
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    
+    // Interpolate: result = prevTime + (currTime - prevTime) * t
+    // (Result is typically used for smooth rendering)
+    // float interpolatedTime = (float)prevTime + (float)(currTime - prevTime) * t;
+    // TODO: Store result somewhere if needed
+}
+
 // ── Iteration 5: New Subsystem Implementations ───────────────────────────────
 
 // ── Memory Allocator (AllocEngineObject) ──────────────────────────────────────
@@ -776,6 +830,13 @@ void InitFrameCallbackSystem() {
     for (int i = 0; i < 8; i++) {
         g_FrameCallbackSlots[i].func = NULL;
         g_FrameCallbackSlots[i].context = NULL;
+    }
+    
+    // Iteration 6: Initialize callback interval
+    // Set to 16ms (60 FPS) in 16.16 fixed-point format
+    // 16ms << 16 = 16 * 65536 = 1048576
+    if (g_ullCallbackInterval == 0) {
+        g_ullCallbackInterval = 16ULL << 16;  // 16ms for ~60 FPS
     }
 }
 
@@ -1028,10 +1089,19 @@ void GameFrameUpdate() {
         //   2. (*DAT_008e1644[1])():
         //      - Dispatches to render system
         //
-        // TODO: UpdateFrameTimingPrimary(&g_dwGameTicks);
-        // TODO: (*DAT_008e1644[0])(&g_dwGameTicks);
-        // TODO: InterpolateFrameTime();
-        // TODO: (*DAT_008e1644[1])();
+        // Iteration 6: Implement primary and secondary callbacks
+        
+        // Primary callback flow:
+        UpdateFrameTimingPrimary(&g_dwGameTicks);
+        
+        // Call all registered frame callbacks (game logic update)
+        InvokeFrameCallbacks();
+        
+        // Secondary callback flow:
+        InterpolateFrameTime();
+        
+        // TODO: Call secondary render callback if callback table is initialized
+        // if (DAT_008e1644[1]) (*DAT_008e1644[1])();
     }
 }
 

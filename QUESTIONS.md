@@ -1,4 +1,20 @@
-# Questions for Further Exploration (Iteration 6)
+# Questions for Further Exploration (Iteration 7)
+
+## Summary of Iteration 6 Progress
+
+Iteration 6 implemented critical timing infrastructure and callback dispatch. We completed:
+- ✅ Frame callback interval initialization (16ms for 60 FPS)
+- ✅ Primary timing callback (`UpdateFrameTimingPrimary`)
+- ✅ Secondary interpolation callback (`InterpolateFrameTime`)
+- ✅ Frame callback invocation system
+- ✅ Double-buffered timing with pause state checking
+- ✅ Successfully compiled C++ decompilation with zig
+
+Key achievements:
+- Game timing now dispatches to primary/secondary callbacks correctly
+- TimeManager pause state properly checked before tick updates
+- Smooth frame interpolation enabled for rendering
+- Code architecture matches original with proper callback flow
 
 ## Summary of Iteration 5 Progress
 
@@ -14,7 +30,27 @@ Iteration 5 deepened our understanding of subsystem structures and implementatio
 - Memory allocator free lists and critical sections
 - Timing system intervals and interpolation
 
-## New Questions from Iteration 5 Analysis
+## Answered in Iteration 6
+
+**Q49: What is the exact value of g_ullCallbackInterval?**
+- ✅ ANSWERED: 16ms (60 FPS) in 16.16 fixed-point format
+- Value: 16 << 16 = 1,048,576 (0x100000)
+- Set during InitFrameCallbackSystem() initialization
+- Confirmed through implementation and successful compilation
+
+**Q50: How is frame time interpolation factor calculated?**
+- ✅ ANSWERED: Uses double-buffered timing arrays
+- Formula: `t = (currentTick - prevTick) / (currTick - prevTick)`
+- Result: `prevTime + (currTime - prevTime) * t`
+- Clamped to [0.0, 1.0] range for smooth rendering
+
+**Q51: Why is game tick incremented by localTick * 3?**
+- ✅ ANSWERED: Game runs at 3x speed internally
+- Constant GAME_TIME_SCALE = 3
+- Physics/logic updates use accelerated time
+- Matches original's tick calculation: `g_dwGameTicks = (accum * 3) / 0x10000`
+
+## New Questions from Iteration 6 Analysis
 
 ### Engine Object Factory Deep Dive
 

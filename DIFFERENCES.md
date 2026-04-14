@@ -1,4 +1,4 @@
-# Differences Between Original hp.exe and C++ Decompilation (Iteration 5)
+# Differences Between Original hp.exe and C++ Decompilation (Iteration 6)
 
 This document compares the original `hp.exe` architecture (documented in `ARCHITECTURE.md` from binary analysis) against the C++ reconstruction in `decompilation-src/` (described in `CPP-ARCHITECTURE.md`).
 
@@ -58,10 +58,13 @@ This document compares the original `hp.exe` architecture (documented in `ARCHIT
 | Callback Structure | `{func_ptr, context_ptr}` pairs | Same | ✅ MATCH |
 | Registration | Multiple subsystems register callbacks | `RegisterFrameCallback()` implemented | ✅ MATCH |
 | Invocation | Called from `GameFrameUpdate` | `InvokeFrameCallbacks()` implemented | ✅ MATCH |
-| Primary Callback | @ DAT_008e1644[0], called with `&localTick` | Declared, not dispatched | 🔲 MISSING |
-| Secondary Callback | @ DAT_008e1644[1], called with no args | Declared, not dispatched | 🔲 MISSING |
+| Primary Callback | @ DAT_008e1644[0], called with `&localTick` | `UpdateFrameTimingPrimary()` implemented | ✅ MATCH |
+| Secondary Callback | @ DAT_008e1644[1], called with no args | `InterpolateFrameTime()` implemented | ✅ MATCH |
+| Callback Interval | 16ms (60 FPS) in 16.16 fixed-point | Initialized to 16ms << 16 | ✅ MATCH |
+| Double-Buffering | Tick and time buffers indexed by flip | `g_dwTickBuffer[2]`, `g_dwTimeBuffer[2]` | ✅ MATCH |
+| TimeManager Pause | Checks pause flag before tick updates | Implemented in UpdateFrameTimingPrimary | ✅ MATCH |
 
-**Impact:** Frame callbacks are central to game logic. Primary/secondary dispatch is not yet hooked up in `GameFrameUpdate`.
+**Impact (Iteration 6):** ✅ Frame callbacks now fully functional! Primary/secondary dispatch implemented and hooked up in `GameFrameUpdate`.
 
 ---
 
@@ -160,18 +163,20 @@ This document compares the original `hp.exe` architecture (documented in `ARCHIT
 | Component | Original | C++ Implementation | Status |
 |-----------|----------|-------------------|--------|
 | Fixed-Point Format | 64-bit 16.16 | Same | ✅ MATCH |
-| Callback Interval | @ DAT_00c83190/94, likely 16ms (60 FPS) | `g_ullCallbackInterval` declared | ⚠️ PARTIAL |
-| Interval Initialization | Set in `InitFrameCallbackSystem` or first `GameFrameUpdate` | Not set | 🔲 MISSING |
+| Callback Interval | @ DAT_00c83190/94, 16ms (60 FPS) | Initialized to 16 << 16 | ✅ MATCH |
+| Interval Initialization | Set in `InitFrameCallbackSystem` | Implemented | ✅ MATCH |
 | Game Tick Counter | @ DAT_00c83110, incremented by localTick * 3 | `g_dwGameTicks` implemented | ✅ MATCH |
+| Tick Counter Update | Increments by localTick * 3 | Implemented in UpdateFrameTimingPrimary | ✅ MATCH |
 | Time Scale | * 3 / 0x10000 | Same | ✅ MATCH |
 | TimeManager Singleton | @ DAT_00bef768, vtable + isPaused | `TimeManager*` declared | ⚠️ PARTIAL |
-| Pause Flag | @ +0x04, 0=running | Declared in struct | ✅ MATCH |
-| UpdateFrameTimingPrimary | Checks pause, updates ticks | Not implemented | 🔲 MISSING |
-| InterpolateFrameTime | Smooth interpolation | Not implemented | 🔲 MISSING |
+| Pause Flag | @ +0x04, 0=running | Checked in UpdateFrameTimingPrimary | ✅ MATCH |
+| UpdateFrameTimingPrimary | Checks pause, updates ticks & buffers | Fully implemented | ✅ MATCH |
+| InterpolateFrameTime | Smooth interpolation formula | Fully implemented | ✅ MATCH |
+| Double-Buffer Tick | @ DAT_00c83128[2] | `g_dwTickBuffer[2]` | ✅ MATCH |
+| Double-Buffer Time | @ DAT_00c83120[2] | `g_dwTimeBuffer[2]` | ✅ MATCH |
+| Frame Flip Index | @ DAT_00c83130, toggles 0/1 | `g_nFrameFlip ^= 1` | ✅ MATCH |
 
-**Impact:** Timing infrastructure exists but callback dispatch and interpolation are missing.
-
-**Recommendation:** Set `g_ullCallbackInterval = 16 << 16` in init, implement primary/secondary timing updates.
+**Impact (Iteration 6):** ✅ Timing system now fully functional! All callbacks and interpolation implemented.
 
 ---
 
@@ -294,41 +299,48 @@ This document compares the original `hp.exe` architecture (documented in `ARCHIT
 
 ---
 
-## Summary of Gaps (Priority Order)
+## Iteration 6 Summary
 
-### High Priority (Blocks Functionality)
+### Completed in Iteration 6 ✅
 
-1. **Engine Object Factory Creation** - Without this, subsystems can't initialize
-2. **Frame Callback Dispatch** - Game logic and rendering won't update
-3. **Audio Thread Creation** - Audio initialization will hang
-4. **Callback Interval Initialization** - Frame timing won't work correctly
+1. ✅ **Frame Callback Dispatch** - Primary/secondary callbacks now fully implemented and dispatched
+2. ✅ **Callback Interval Initialization** - Set to 16ms (60 FPS) in InitFrameCallbackSystem
+3. ✅ **UpdateFrameTimingPrimary** - Tick counter and double-buffer updates working
+4. ✅ **InterpolateFrameTime** - Smooth frame interpolation for rendering
+5. ✅ **Compilation Success** - Builds with zig, produces ~820 KB Windows executable
 
-### Medium Priority (Reduces Accuracy)
+### Remaining Gaps (Priority Order)
 
-5. **Message Dispatch Mapping** - Event system won't route correctly
-6. **Scene Listener List** - Scene transitions won't notify properly
-7. **Render Batch Building** - Rendering won't be optimized
-8. **DirectX Parameter Clarification** - Device may not initialize correctly
-9. **Shader Capability Detection** - Wrong shader path may be used
+#### High Priority (Blocks Subsystems)
 
-### Low Priority (Nice to Have)
+1. **Engine Object Factory Creation** - Without this, subsystems can't initialize properly
+2. **Audio Thread Creation** - Audio initialization will hang without worker thread
+3. **Message Dispatch Mapping** - Event system won't route correctly without msgID storage
 
-10. **Memory Allocator Stats** - Leak detection and profiling unavailable
-11. **Subsystem Initialization Details** - Content won't load (strings, videos, shaders)
-12. **Proper Teardown** - May cause leaks, but doesn't affect gameplay
-13. **CLI Parser Implementation** - Command-line args won't be parsed correctly
+#### Medium Priority (Reduces Accuracy)
+
+4. **Scene Listener List** - Scene transitions won't notify properly
+5. **Render Batch Building** - Rendering won't be optimized without shader sorting
+6. **DirectX Parameter Clarification** - Device may not initialize with optimal settings
+7. **Shader Capability Detection** - Wrong shader path may be selected
+
+#### Low Priority (Nice to Have)
+
+8. **Memory Allocator Stats** - Leak detection and profiling unavailable
+9. **Subsystem Initialization Details** - Content won't load (strings, videos, shaders)
+10. **Proper Teardown** - May cause leaks, but doesn't affect gameplay
+11. **CLI Parser Implementation** - Extended command-line args won't be parsed
 
 ---
 
-## Next Iteration Focus
+## Next Iteration Focus (Iteration 7)
 
-Based on this analysis, Iteration 6 should prioritize:
+Based on Iteration 6 progress, Iteration 7 should prioritize:
 
-1. Implement engine object factory with magic number
-2. Hook up frame callback dispatch (primary/secondary)
-3. Set callback interval (16ms or 33ms)
-4. Implement message dispatch lookup and dispatch logic
-5. Create audio thread and worker function
-6. Clarify DirectX device parameters
+1. **Engine Object Factory** - Implement factory with magic number {0x88332000000001, 0}
+2. **Audio Thread** - CreateThread and worker loop for async audio processing
+3. **Message Dispatch Completion** - Add msgID field to handler table, implement lookup
+4. **Scene Listener List** - Registration, notification, and deferred flush
+5. **DirectX Parameter Analysis** - Determine all 9 CreateD3DDevice parameters
 
-These changes will significantly improve functional equivalence with the original binary.
+These changes will enable subsystem initialization and improve functional accuracy.

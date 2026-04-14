@@ -294,6 +294,8 @@ void AudioStream_Resume();             // thunk_FUN_00ec67e8 — resumes audio a
 void GameFrameUpdate();
 DWORD GetGameTime();
 void ProcessDeferredCallbacks();
+void UpdateFrameTimingPrimary(DWORD* localTick);  // FUN_00617f50 — updates double-buffered timing
+void InterpolateFrameTime();                       // FUN_00617ee0 — smooth frame interpolation
 
 // Game object pause/resume
 void PauseGameObjects(int param);
