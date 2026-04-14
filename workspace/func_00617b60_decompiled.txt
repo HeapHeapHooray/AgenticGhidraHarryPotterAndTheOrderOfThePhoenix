@@ -1,0 +1,20 @@
+INFO  DecompileFunction.java> 
+void FUN_00617b60(void)
+
+{
+  int *piVar1;
+  int in_EAX;
+  int iVar2;
+  
+  if (*(int *)(in_EAX + 0xc) != 0) {
+    iVar2 = (**(code **)(**(int **)(in_EAX + 0xc) + 0x10))();
+    piVar1 = *(int **)(iVar2 + 0x218);
+    if (piVar1 != (int *)0x0) {
+      (**(code **)(*piVar1 + 0x20))(piVar1);
+    }
+  }
+  return;
+}
+
+ (GhidraScript)  
+INFO  REPORT: Save succeeded for processed file: /hp.exe (HeadlessAnalyzer)  

@@ -121,17 +121,111 @@ Monitors and maintains DirectX 9 device state:
   - `D3DERR_DEVICENOTRESET` (0x88760869): Device ready for reset
 
 ### Recovery Process:
-1. Release DirectX resources (calls `FUN_0067cfb0`)
+1. Release DirectX resources (calls `ReleaseDirectXResources` `0067cfb0`)
 2. Call `IDirect3DDevice9::Reset` with saved parameters
-3. Restore DirectX resources (calls `FUN_0067d0c0`)
+3. Restore DirectX resources (calls `RestoreDirectXResources` `0067d0c0`)
 
 ### Global State:
 - `DAT_00bf1920`: Pointer to IDirect3DDevice9 interface
 - `DAT_00bf18aa`: Device lost flag
 
+### Resource Management
+
+**ReleaseDirectXResources (`0067cfb0`):**
+Releases DirectX resources before device reset:
+- `DAT_00b95034`: Unknown DirectX interface
+- `DAT_00bf1934`: Render target or texture surface
+- `DAT_00bf1930`: Back buffer surface
+- `DAT_00bf1938`: Additional render target
+- Clears cached surface pointers: `DAT_00af1390`, `DAT_00ae9250`
+
+**RestoreDirectXResources (`0067d0c0`):**
+Restores DirectX resources after device reset:
+1. Calls initialization functions
+2. Gets back buffer from device (`GetBackBuffer`)
+3. Gets surface description from back buffer
+4. Creates render target texture (`IDirect3DDevice9::CreateTexture`)
+5. Gets surface from texture (`GetSurfaceLevel`)
+6. Sets render targets (`IDirect3DDevice9::SetRenderTarget`)
+7. Performs final initialization
+
+## Game Frame Update (`00618140`)
+
+The main game update function with sophisticated frame timing:
+
+### Timing System:
+- Gets current time from `FUN_00618010()`
+- Calculates delta time since last frame
+- **Delta cap**: 100ms maximum to prevent "spiral of death" when game hitches
+- Accumulates delta time in 64-bit counters
+- **Game speed**: Multiplies accumulated time by 3x for game logic
+- Triggers callbacks when timing thresholds are met
+
+### Global Timing Variables:
+- `DAT_00e6e5e0`, `DAT_00e6e5e4`: Last frame time (64-bit microseconds)
+- `DAT_00c83198`, `DAT_00c8319c`: Accumulated game time (64-bit)
+- `DAT_00c831a8`, `DAT_00c831ac`: Next callback time (64-bit)
+- `DAT_00c83190`, `DAT_00c83194`: Callback interval (64-bit)
+- `DAT_008e1648`: Frame flip/toggle flag for double buffering callbacks
+
+### Frame Callbacks:
+- `FUN_00617f50`: Primary frame callback
+- `FUN_00617ee0`: Secondary frame callback
+- `DAT_008e1644`: Function pointer table for callbacks
+
+## DirectInput Management
+
+The game uses DirectInput for keyboard, mouse, and joystick input.
+
+### Input Devices:
+- **Keyboard**: `DAT_00e6a070` (IDirectInputDevice8*)
+- **Mouse**: `DAT_00e6a194` (IDirectInputDevice8*)
+- **Joysticks**: Array at `DAT_00e6a42c`, supports 2 joysticks (stride 0x248 bytes each)
+
+### Acquire/Unacquire on Focus Changes:
+
+**UnacquireInputDevices (`0068dac0`)** - Called when losing focus:
+1. Unacquires keyboard (`IDirectInputDevice8::Unacquire`)
+2. Unacquires mouse
+3. Calls `Ordinal_5(0)` - likely `ShowCursor(TRUE)`
+4. Unacquires both joysticks
+5. Fatal error if any unacquire fails
+
+**AcquireInputDevices (`0068da30`)** - Called when gaining focus:
+1. Acquires keyboard (`IDirectInputDevice8::Acquire`)
+2. Acquires mouse
+3. Calls `Ordinal_5(1)` - likely `ShowCursor(FALSE)`
+4. Acquires both joysticks
+5. Fatal error if any acquire fails
+
+## Window Position Persistence
+
+### SaveWindowPlacement (`0060d220`)
+Saves window position and state to registry on close:
+
+**Saved settings (in GameSettings section):**
+- `PosX`: Window X position (adjusted for borders)
+- `PosY`: Window Y position (adjusted for borders)
+- `SizeX`: Window width (adjusted for borders)
+- `SizeY`: Window height (adjusted for borders)
+- `Minimized`: "true"/"false" (SW_SHOWMINIMIZED state)
+- `Maximized`: "true"/"false" (SW_SHOWMAXIMIZED state)
+
+Process:
+1. Calls `GetWindowPlacement` to get current window state
+2. Adjusts rect using `AdjustWindowRect` with style `0xcf0000`
+3. Calls `WriteRegistrySetting` (`0060c670`) to save each value
+
+### WriteRegistrySetting (`0060c670`)
+Writes string values to registry:
+- Path: `HKEY_CURRENT_USER\Software\Electronic Arts\<app>\<section>`
+- Creates registry key if it doesn't exist
+- Counterpart to `ReadRegistrySetting`
+
 ## Key Components
--   **Window Management**: Standard Win32 API with fullscreen/windowed mode support
--   **Configuration**: Registry-based settings with HKCU/HKLM fallback
--   **Rendering**: DirectX 9 with device lost recovery
--   **Input**: Mouse acceleration disabled, cursor managed based on focus
+-   **Window Management**: Standard Win32 API with fullscreen/windowed mode support, position/size persistence
+-   **Configuration**: Registry-based settings with HKCU/HKLM fallback, automatic key creation
+-   **Rendering**: DirectX 9 with device lost recovery and multiple render targets
+-   **Input**: DirectInput for keyboard/mouse/joystick, acquire/unacquire on focus changes, mouse acceleration disabled
+-   **Timing**: Sophisticated frame timing with 100ms delta cap, 3x game speed multiplier, double-buffered callbacks
 -   **Message Loop**: Integrated with game update loop and frame limiting
