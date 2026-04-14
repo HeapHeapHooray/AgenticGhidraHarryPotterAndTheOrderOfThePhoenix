@@ -1044,15 +1044,69 @@ void LoadSceneIDs() {
     // TODO: Load actual scene IDs from level data or scripting
 }
 
+// Global scene listener list (would be in globals.h in full implementation)
+struct SceneListener {
+    void (*callback)(int oldScene, int newScene);
+    void* context;
+    SceneListener* next;
+};
+
+static SceneListener* g_pSceneListenerHead = NULL;
+static bool g_bSceneChangePending = false;
+static int g_nPendingOldScene = 0;
+static int g_nPendingNewScene = 0;
+
+void RegisterSceneListener(void (*callback)(int, int), void* context) {
+    // Add listener to linked list
+    SceneListener* listener = (SceneListener*)malloc(sizeof(SceneListener));
+    if (listener) {
+        listener->callback = callback;
+        listener->context = context;
+        listener->next = g_pSceneListenerHead;
+        g_pSceneListenerHead = listener;
+    }
+}
+
 void NotifySceneListeners(int newSceneID) {
     // Iterate scene listener list and call callbacks
-    // TODO: Implement listener list iteration
+    int oldScene = g_SceneIDs.current;
+    
+    if (oldScene == newSceneID) {
+        return;  // No change
+    }
+    
+    // Mark as pending to prevent recursive scene changes during callbacks
+    if (g_bSceneChangePending) {
+        // Already processing a scene change - queue this one
+        g_nPendingOldScene = oldScene;
+        g_nPendingNewScene = newSceneID;
+        return;
+    }
+    
+    g_bSceneChangePending = true;
+    
+    // Notify all listeners
+    SceneListener* listener = g_pSceneListenerHead;
+    while (listener != NULL) {
+        if (listener->callback != NULL) {
+            listener->callback(oldScene, newSceneID);
+        }
+        listener = listener->next;
+    }
+    
+    // Update current scene
+    g_SceneIDs.current = newSceneID;
+    g_bSceneChangePending = false;
 }
 
 void FlushDeferredSceneListeners() {
     // FUN_006125a0: Flush deferred scene transition listeners
     // Called when pending-change flag is set
-    // TODO: Process queued scene transition callbacks
+    
+    if (g_bSceneChangePending) {
+        // Process the pending scene change
+        NotifySceneListeners(g_nPendingNewScene);
+    }
 }
 
 void SwitchRenderOutputModeEx(int sceneID) {
@@ -1069,28 +1123,75 @@ void SwitchRenderOutputModeEx(int sceneID) {
 
 void BuildRenderBatch() {
     // FUN_0063d600: Build and sort render batch by shader type
-    // TODO: Recognize shader types (BLOOM, GLASS, BACKDROP)
-    // TODO: Batch draw calls to minimize state changes
+    // Sort batches by shader hash to minimize state changes
+    // Render order: SKY → OPAQUE → WATER → ALPHA → GLASS → BLOOM → BACKDROP
+    
+    if (g_pDeferredRenderQueue == NULL) {
+        return;  // No batches to process
+    }
+    
+    // In a full implementation, we would:
+    // 1. Iterate all batches and categorize by shader hash
+    // 2. Sort within each category by depth (opaque: front-to-back, alpha: back-to-front)
+    // 3. Rebuild linked list in optimal render order
+    // 4. Merge batches with same material/shader when possible
+    
+    // For now, just process in linked list order
+    // The sorting would be done here before rendering
 }
 
 void ProcessDeferredRenderQueue() {
     // Process render queue with 2ms budget
-    DWORD startTime = GetGameTime();
+    // Uses QueryPerformanceCounter for precise timing
+    
+    if (g_pDeferredRenderQueue == NULL) {
+        return;  // Nothing to render
+    }
+    
+    LARGE_INTEGER freq, start, current;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&start);
+    
+    // Convert 2ms budget to performance counter ticks
+    LONGLONG budgetTicks = (2LL * freq.QuadPart) / 1000LL;
     
     RenderBatchNode* node = g_pDeferredRenderQueue;
+    RenderBatchNode* prev = NULL;
+    
     while (node != NULL) {
         // Check time budget
-        DWORD elapsed = GetGameTime() - startTime;
-        if (elapsed >= DEFERRED_QUEUE_BUDGET_MS) {
-            break;  // Budget exhausted, continue next frame
+        QueryPerformanceCounter(&current);
+        LONGLONG elapsed = current.QuadPart - start.QuadPart;
+        
+        if (elapsed > budgetTicks) {
+            // Budget exhausted - save remaining batches for next frame
+            if (prev != NULL) {
+                prev->next = NULL;  // Terminate processed list
+            }
+            g_pDeferredRenderQueue = node;  // Save remaining for next frame
+            break;
         }
         
-        // Process node
-        BuildRenderBatch();
+        // Render this batch
+        // In a full implementation:
+        // 1. Set shader via SetVertexShader/SetPixelShader
+        // 2. Set material properties via SetTexture/SetRenderState
+        // 3. Set world matrix via SetTransform
+        // 4. Draw geometry via DrawIndexedPrimitive
+        
+        // TODO: if (g_pd3dDevice) {
+        //     g_pd3dDevice->SetTransform(D3DTS_WORLD, (D3DMATRIX*)node->world_matrix);
+        //     // Set shader, material, draw call...
+        // }
         
         // Move to next
-        RenderBatchNode* next = node->next;
-        node = next;
+        prev = node;
+        node = node->next;
+    }
+    
+    // All batches processed - clear queue
+    if (node == NULL) {
+        g_pDeferredRenderQueue = NULL;
     }
 }
 
