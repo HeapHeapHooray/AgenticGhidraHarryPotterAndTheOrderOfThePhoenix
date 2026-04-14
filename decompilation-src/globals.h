@@ -412,6 +412,7 @@ void FinalizeRenderInit();     // FUN_006677c0 — finalizes render setup
 // DirectInput functions
 void UnacquireInputDevices();
 void AcquireInputDevices();
+void PollInputDevices();  // Poll input state each frame
 
 // Audio stream resume (called on delayed-timer expiry after focus regain)
 void AudioStream_Resume();             // thunk_FUN_00ec67e8 — resumes audio after focus-loss pause

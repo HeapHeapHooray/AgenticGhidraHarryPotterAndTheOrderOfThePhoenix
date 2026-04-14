@@ -624,6 +624,50 @@ void AcquireInputDevices() {
     }
 }
 
+void PollInputDevices() {
+    // Poll all active DirectInput devices and update state
+    // This would be called from GameFrameUpdate() each frame
+    
+    if (g_pKeyboard) {
+        BYTE keyState[256];
+        HRESULT hr = g_pKeyboard->GetDeviceState(sizeof(keyState), keyState);
+        if (SUCCEEDED(hr)) {
+            // TODO: Copy to double-buffered state for edge detection
+            // memcpy(prev_keyboard_state, current_keyboard_state, 256);
+            // memcpy(current_keyboard_state, keyState, 256);
+        } else if (hr == DIERR_INPUTLOST || hr == DIERR_NOTACQUIRED) {
+            // Device lost - try to reacquire
+            g_pKeyboard->Acquire();
+        }
+    }
+    
+    if (g_pMouse) {
+        DIMOUSESTATE2 mouseState;
+        HRESULT hr = g_pMouse->GetDeviceState(sizeof(DIMOUSESTATE2), &mouseState);
+        if (SUCCEEDED(hr)) {
+            // TODO: Copy to double-buffered state
+            // prev_mouse_state = current_mouse_state;
+            // current_mouse_state = mouseState;
+        } else if (hr == DIERR_INPUTLOST || hr == DIERR_NOTACQUIRED) {
+            g_pMouse->Acquire();
+        }
+    }
+    
+    for (int i = 0; i < MAX_JOYSTICKS; i++) {
+        if (g_pJoystick[i]) {
+            DIJOYSTATE2 joyState;
+            HRESULT hr = g_pJoystick[i]->GetDeviceState(sizeof(DIJOYSTATE2), &joyState);
+            if (SUCCEEDED(hr)) {
+                // TODO: Copy to double-buffered state
+                // prev_joystick_state[i] = current_joystick_state[i];
+                // current_joystick_state[i] = joyState;
+            } else if (hr == DIERR_INPUTLOST || hr == DIERR_NOTACQUIRED) {
+                g_pJoystick[i]->Acquire();
+            }
+        }
+    }
+}
+
 // ── Audio/update pause system ─────────────────────────────────────────────────
 // These are stubs; the real implementations are complex state machines that
 // interact with game object lists.
@@ -811,15 +855,32 @@ void RegisterMessageHandler(void* dest, const char* msgName, int paramType) {
 }
 
 void DispatchMessage(DWORD msgID, void* params) {
-    // Lookup message ID and dispatch to handler
-    for (int i = 0; i < g_nMessageHandlerCount; i++) {
-        // TODO: Check if msgID matches
-        // if (g_MessageDispatchTable[i].msgID == msgID) {
-        //     g_MessageDispatchTable[i].handler(
-        //         g_MessageDispatchTable[i].dest, params);
-        //     return;
-        // }
+    // Hash table lookup with linear probing
+    // Table size is MESSAGE_DISPATCH_TABLE_SIZE (256)
+    int slot = msgID & 0xFF;  // Initial slot (msgID % 256)
+    int probeCount = 0;
+    
+    while (probeCount < MESSAGE_DISPATCH_TABLE_SIZE) {
+        MessageEntry* entry = &g_MessageDispatchTable[slot];
+        
+        // Check if this slot matches our message
+        if (entry->msg_hash == msgID && entry->handler != NULL) {
+            // Found it - dispatch to handler
+            entry->handler(entry->dest_object, params);
+            return;
+        }
+        
+        // Empty slot or hash mismatch - try next slot (linear probing)
+        if (entry->msg_hash == 0) {
+            // Empty slot means message not registered
+            break;
+        }
+        
+        slot = (slot + 1) & 0xFF;  // Wrap around
+        probeCount++;
     }
+    
+    // Message not found - silently ignore (original behavior)
 }
 
 // ── Frame Callback System ─────────────────────────────────────────────────────
@@ -901,6 +962,75 @@ int AudioPollGate() {
     
     AudioCommand* cmd = &g_AudioCommandQueue[g_nAudioQueueHead];
     return cmd->status;
+}
+
+DWORD WINAPI AudioThreadProc(LPVOID lpParam) {
+    // Audio thread worker function
+    // Processes commands from the audio command queue
+    
+    bool bRunning = true;
+    
+    while (bRunning) {
+        // Poll for commands
+        if (g_nAudioQueueHead != g_nAudioQueueTail) {
+            // Command available
+            AudioCommand* cmd = &g_AudioCommandQueue[g_nAudioQueueHead];
+            
+            // Process command based on opcode
+            int result = 1;  // Default: success
+            
+            switch (cmd->opcode) {
+                case AUDIO_CMD_OPEN_DEVICE:
+                    // TODO: Open DirectSound device
+                    // result = OpenAudioDevice(cmd->params);
+                    break;
+                    
+                case AUDIO_CMD_QUERY_CAPS:
+                    // TODO: Query audio capabilities
+                    // result = QueryAudioCaps(cmd->params);
+                    break;
+                    
+                case AUDIO_CMD_CONFIGURE:
+                    // TODO: Configure audio format
+                    // result = ConfigureAudio(cmd->params);
+                    break;
+                    
+                case AUDIO_CMD_START_STREAM:
+                    // TODO: Start audio streaming
+                    // result = StartAudioStream(cmd->params);
+                    break;
+                    
+                case AUDIO_CMD_STOP_STREAM:
+                    // TODO: Stop audio streaming
+                    // result = StopAudioStream(cmd->params);
+                    break;
+                    
+                default:
+                    // Unknown command
+                    result = -2;  // Error
+                    break;
+            }
+            
+            // Update command status
+            cmd->status = result;
+            
+            // Call completion callback if provided
+            if (cmd->callback != NULL) {
+                cmd->callback(result);
+            }
+            
+            // Advance head pointer
+            g_nAudioQueueHead = (g_nAudioQueueHead + 1) % AUDIO_COMMAND_QUEUE_SIZE;
+        } else {
+            // Queue empty - sleep briefly to avoid busy-waiting
+            Sleep(1);
+        }
+        
+        // Check if we should exit (would need a global flag)
+        // bRunning = g_bAudioThreadRunning;
+    }
+    
+    return 0;
 }
 
 // ── Scene Management ──────────────────────────────────────────────────────────
