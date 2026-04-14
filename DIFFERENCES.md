@@ -1,214 +1,334 @@
-# Differences Between Original Binary and C++ Decompilation
+# Differences Between Original hp.exe and C++ Decompilation (Iteration 5)
 
-This document compares the architecture documented in `ARCHITECTURE.md` (from binary analysis)
-against the C++ reconstruction in `decompilation-src/` (described in `CPP-ARCHITECTURE.md`).
-Items marked **MISSING** represent gaps to address in the next iteration.
+This document compares the original `hp.exe` architecture (documented in `ARCHITECTURE.md` from binary analysis) against the C++ reconstruction in `decompilation-src/` (described in `CPP-ARCHITECTURE.md`).
 
----
-
-## 1. WinMain Initialization Sequence
-
-| Step | Original (`ARCHITECTURE.md`) | C++ (`main.cpp`) | Status |
-|------|------------------------------|-----------------|--------|
-| FPU config | `_control87(0x20000, 0x30000)` | Same | OK |
-| System params | `SaveOrRestoreSystemParameters(false)` | Same | OK |
-| Cmdline copy | strncpy to two 512-byte buffers | Same | OK |
-| CLI parser | `CLI_CommandParser_ParseArgs()` before single-instance check | TODO comment present, call absent | **MISSING** call |
-| Single instance | `FindWindowA` → TerminateProcess | Same | OK |
-| Window class | `RegisterWindowClass()` | Same | OK |
-| Registry load | `LoadGameSettings()` | Same | OK |
-| Cmdline parse | `fullscreen`, `widescreen` | Same | OK |
-| Window creation | `CreateGameWindow(hInstance, width, height)` | Same signature | OK |
-| Get client rect | `GetClientRect(hWnd, &rect)` for exact client height | `GetClientRect(ghWnd, &clientRect)` | OK |
-| Engine factory | Creates `DAT_00bef6d0` (2904-byte engine object) via callback manager factory | `g_pComObject` declared, never created | **MISSING** factory call |
-| PreDirectXInit | `PreDirectXInit()` | Called (empty stub) | OK (stub) |
-| DirectX init | `InitDirectXAndSubsystems(clientHeight)` | Called (empty stub) | OK (stub) |
-| Subsystems init | `InitGameSubsystems()` + `DAT_00bef6c6 = 1` | Called (empty stub) + `g_bSubsysInitialized = true` | OK (stub) |
-| Window restore | `ShowWindow(SW_MAXIMIZE/MINIMIZE/nShowCmd)` after init; then `UpdateWindow` | Same order | OK |
-| Main loop | `MainLoop()` | Same | OK |
-| Render teardown | `RenderAndAudioTeardown()` (`00ec6610`) | TODO comment | **MISSING** |
-| Engine obj release | `(**(callback_mgr + 0xc))(DAT_00bef6d0, 0)` via callback system | TODO comment, `g_pComObject = NULL` | **MISSING** |
-| Save options | `SaveOptionsOnExit()` (`00eb4a5d`) | Called (empty stub) | OK (stub) |
-| Input pause | Pause via RealInputSystem vtable | TODO comment | **MISSING** |
-| Unacquire | `UnacquireInputDevices()` | Same | OK |
-| Show cursor | Loop until ≥ 1 | Same | OK |
-| Focus flag | `DAT_00bef6c7 = 1` | `g_bHasFocusLost = true` | OK |
-| Cursor/scene | `UpdateCursorVisibilityAndScene()` | Called (empty stub) | OK (stub) |
-| Param restore | `SaveOrRestoreSystemParameters(true)` | Same | OK |
-| Hard exit | `TerminateProcess(hProc, 1)` | Same | OK |
+**Status Legend:**
+- ✅ **MATCH** - Functionally equivalent implementation
+- ⚠️ **PARTIAL** - Implemented but incomplete or simplified
+- 🔲 **MISSING** - Not yet implemented
+- 🔄 **DIFFERS** - Different approach but equivalent behavior
 
 ---
 
-## 2. Registry System
+## 1. Initialization Sequence
 
-| Aspect | Original | C++ | Status |
-|--------|----------|-----|--------|
-| HKCU → HKLM fallback | Yes | Yes | OK |
-| HKCU write-back on HKLM hit | Calls `FUN_0060cc70` to write value back to HKCU | Implemented inline | OK |
-| Auto-create in HKCU | Yes | Yes | OK |
-| `std::basic_string` internal use | Uses C++ string objects as parameters internally | Plain C strings | DIFFERS (implementation detail) |
+### WinMain Entry and Setup
 
----
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| FPU Configuration | `_control87(0x20000, 0x30000)` | Same | ✅ MATCH |
+| System Parameters Save | `SystemParametersInfoA` for mouse/SR | Same | ✅ MATCH |
+| Command Line Copy | 2x strncpy to 0x200-byte buffers | Same | ✅ MATCH |
+| CLI Parser | `CLI_CommandParser_ParseArgs()` @ 00eb787a | Stubbed (TODO comment) | 🔲 MISSING |
+| Single Instance | `FindWindowA` → `TerminateProcess` | Same | ✅ MATCH |
+| Window Registration | `RegisterWindowClass()` | Same | ✅ MATCH |
+| Registry Load | `LoadGameSettings()` | Same | ✅ MATCH |
+| Command Line Flags | `fullscreen`, `widescreen`, etc. | Same | ✅ MATCH |
+| Window Creation | `CreateGameWindow(hInst, w, h)` | Same | ✅ MATCH |
 
-## 3. System Parameter Management
+### Engine Object Factory
 
-| Aspect | Original | C++ | Status |
-|--------|----------|-----|--------|
-| Storage layout | `mouseSpeed[2]`, `mouseAccel[2]`, `screenReader[6]` | Same struct layout | OK |
-| SPI get/set codes | 0x3a/3b, 0x34/35, 0x32/33 | Same constants via globals.h | OK |
-| Bit check | bit 0 clear = acceleration active | Same | OK |
-| Mask | `0xFFFFFFF3` | `MOUSE_ACCEL_FLAGS_MASK = 0xFFFFFFF3` | OK |
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| Callback Manager Init | `GetOrInitCallbackManager()` @ 00eb5c3e | Global pointers declared | 🔲 MISSING |
+| Engine Root Object | Creates 2904-byte object @ DAT_00bef6d0 | `g_pEngineRootObject` declared, not allocated | 🔲 MISSING |
+| Magic Number | `{0x88332000000001, 0}` for type ID | Not used | 🔲 MISSING |
+| Factory Call | `(*DAT_00e6e874[0])(0xb58, magic)` | Not called | 🔲 MISSING |
+| Dual-Entry System | Primary (DAT_00e6e870) + Secondary (DAT_00e6e874) | Pointers declared | 🔲 MISSING |
 
----
+**Impact:** Engine factory creation is critical for subsystem coordination. Without it, subsystem initialization cannot proceed correctly.
 
-## 4. Window Creation
+### DirectX and Subsystem Initialization
 
-| Aspect | Original | C++ | Status |
-|--------|----------|-----|--------|
-| Signature | `CreateGameWindow(hInstance, width, height)` | Same | OK |
-| Fullscreen style | `WS_POPUP` | Same | OK |
-| Windowed style | `WS_OVERLAPPEDWINDOW` | Same | OK |
-| TOPMOST | `HWND_TOPMOST` in fullscreen | Same | OK |
-| SetMenu | `SetMenu(hWnd, NULL)` in fullscreen | Same | OK |
-| SetThreadExecutionState | `ES_CONTINUOUS \| ES_DISPLAY_REQUIRED` | Same | OK |
-| ShowWindow sequence | `ShowWindow(hWnd, 0)` then `SetWindowPos` | Same | OK |
-| Class style | Fullscreen: `CS_OWNDC \| CS_DBLCLKS`; windowed: adds `CS_VREDRAW \| CS_HREDRAW` | Always uses all four flags | MINOR DIFFERS |
-
----
-
-## 5. WindowProc / Message Handling
-
-| Message | Original | C++ | Status |
-|---------|----------|-----|--------|
-| `WM_DESTROY` | Show cursor + `PostQuitMessage(0)` | Same | OK |
-| `WM_SIZE/ERASEBKGND/ACTIVATEAPP` | Return 0 | Same | OK |
-| `WM_ACTIVATE` focus-loss | `PauseGraphicsState()`, unacquire, show cursor, `g_bHasFocusLost=1`, **`UpdateCursorVisibilityAndScene(AL=1)`**, delayed timer | PauseGraphicsState stub, unacquire, show cursor, `g_bHasFocusLost=true`; UpdateCursorVisibilityAndScene is **TODO** | **MISSING** `UpdateCursorVisibilityAndScene` call |
-| `WM_ACTIVATE` focus-gain | RealInputSystem vtable acquire, `AcquireInputDevices`, show cursor, **`UpdateCursorVisibilityAndScene(AL=0)`**, `g_bHasFocusLost=0`, delay timer | TODO vtable acquire, `AcquireInputDevices`; UpdateCursorVisibilityAndScene is **TODO** | **MISSING** both calls |
-| `WM_SETFOCUS/SETCURSOR` | `PauseGraphicsState()` on focus-loss path | `PauseGraphicsState()` called (stub) | OK (stub) |
-| `WM_SYSCOMMAND` | Block SC_MAXIMIZE/SIZE/MOVE/KEYMENU | Same | OK |
-| `WM_NCHITTEST` | `HTCLIENT` fullscreen | Same | OK |
-| `WM_ENTERMENULOOP` | Return `0x10000` | Same | OK |
-| `WM_WTSSESSION_CHANGE` | wParam 0/7 → 1, else -1 | Same | OK |
-| `WM_PAINT` | `ValidateRect` or `BeginPaint/EndPaint` | Same | OK |
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| PreDirectXInit | Audio context setup @ 00ec64f9 | Stubbed | ⚠️ PARTIAL |
+| DirectX Init | D3D + DirectInput @ 00eb612e | Stubbed | ⚠️ PARTIAL |
+| Game Subsystems Init | Callbacks, devices, language @ 00eb496e | Stubbed, sets flag | ⚠️ PARTIAL |
+| Window Restore | `ShowWindow` + `UpdateWindow` | Same | ✅ MATCH |
 
 ---
 
-## 6. Main Loop
+## 2. Frame Callback System
 
-| Aspect | Original | C++ | Status |
-|--------|----------|-----|--------|
-| Exit condition | `WM_QUIT` or exit flag | Same | OK |
-| Focus-loss cursor handling | `SwitchRenderOutputMode` with specific scene IDs from `DAT_00c82b00/08/ac` | `SwitchRenderOutputMode()` called but stub — no scene IDs passed | OK (stub) |
-| `GameFrameUpdate` | Called | Called | OK |
-| Lazy `InitFrameCallbackSystem` | One-shot init guard before `QueryMemoryAllocatorMax` | Not present | **MISSING** |
-| Memory allocator query | `QueryMemoryAllocatorMax()` tracks `g_nMinFreeMemory` | Called, but stub returns 0 | OK (stub returns 0) |
-| Delayed timer countdown | Subtracts from timer each frame | `timeGetTime()` delta subtracted | OK |
-| Resume audio on expiry | `AudioStream_Resume()` (`00ec67e8`) | TODO comment | **MISSING** |
-| Resume game objects | `ResumeGameObjects()` | Same | OK |
-| Frame rate cap | `Sleep(0)` if under budget | Same | OK |
-| WM_QUIT filter | Filters `(UINT)-1` | Same | OK |
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| Callback Slots | 8 slots @ DAT_00e6e880 (0x1c bytes) | `CallbackSlot g_FrameCallbackSlots[8]` | ✅ MATCH |
+| InitFrameCallbackSystem | Clears 8 slots @ 00eb8744 | `InitFrameCallbackSystem()` implemented | ✅ MATCH |
+| Callback Structure | `{func_ptr, context_ptr}` pairs | Same | ✅ MATCH |
+| Registration | Multiple subsystems register callbacks | `RegisterFrameCallback()` implemented | ✅ MATCH |
+| Invocation | Called from `GameFrameUpdate` | `InvokeFrameCallbacks()` implemented | ✅ MATCH |
+| Primary Callback | @ DAT_008e1644[0], called with `&localTick` | Declared, not dispatched | 🔲 MISSING |
+| Secondary Callback | @ DAT_008e1644[1], called with no args | Declared, not dispatched | 🔲 MISSING |
 
----
-
-## 7. Timing System
-
-| Aspect | Original | C++ | Status |
-|--------|----------|-----|--------|
-| `GetGameTime` implementation | `timeGetDevCaps + timeBeginPeriod + timeGetTime + timeEndPeriod` | Same | OK |
-| 16.16 fixed-point arithmetic | Two separate 32-bit halves (`DAT_00e6e5e0` low, `DAT_00e6e5e4` high) | Single `ULONGLONG` | FUNCTIONALLY EQUIVALENT |
-| Delta cap | `0x640000` (100ms in 16.16) | `MAX_DELTA_TIME_MS << 16` | OK |
-| Game ticks formula | `accum * 3 / 0x10000` | Same | OK |
-| Frame flip toggle | `DAT_00c83130 ^= 1` | `g_nFrameFlip ^= 1` | OK |
-| Primary callback | `UpdateFrameTimingPrimary()` + `(*DAT_008e1644[0])(&localTick)` | TODO comment | **MISSING** |
-| Secondary callback | `InterpolateFrameTime()` + `(*DAT_008e1644[1])()` | TODO comment | **MISSING** |
-| Timing double-buffer | `DAT_00c83170[flip*8]` stores tick/time | Not implemented | **MISSING** |
+**Impact:** Frame callbacks are central to game logic. Primary/secondary dispatch is not yet hooked up in `GameFrameUpdate`.
 
 ---
 
-## 8. DirectX Device Management
+## 3. Message Dispatch System
 
-| Aspect | Original | C++ | Status |
-|--------|----------|-----|--------|
-| `PreDeviceCheck` before `TestCooperativeLevel` | `PreDeviceCheck()` (`0067d2e0`) | `GetAvailableTextureMem` inline | OK (equivalent) |
-| Device lost sleep | 50ms | `DEVICE_LOST_SLEEP_MS (50)` | OK |
-| `D3DPRESENT_PARAMETERS` | Saved struct `DAT_00b94af8`, reused for Reset | `g_d3dpp` global, updated before Reset | OK |
-| `ReleaseDirectXResources` pre-cleanup | `thunk_FUN_00ec04dc()` | TODO comment | **MISSING** |
-| `ReleaseDirectXResources` post-cleanup | `thunk_FUN_00ec19b5()` | TODO comment | **MISSING** |
-| `RestoreDirectXResources` render states | `InitRenderStates()` | Called (empty stub) | OK (stub) |
-| `RestoreDirectXResources` GPU sync | `CreateGPUSyncQuery()` if null | Called conditionally (stub) | OK (stub) |
-| `RestoreDirectXResources` empty stub | `FUN_0067bb20()` (confirmed empty) | Not called | OK (no-op) |
-| `RestoreDirectXResources` AA sentinel | `0xbacb0ffe` | `D3D_AA_PATH_SENTINEL = 0xbacb0ffe` | OK |
-| `RestoreDirectXResources` hw cap check | Checks `TextureOpCaps & 0x80` before texture RT create | Not checked (always creates) | MINOR DIFFERS |
-| `InitD3DStateDefaults` | Called at end of restore | Called (empty stub) | OK (stub) |
-| `ReleaseDirectXResources` RT release | Gets back buffer from swap chain + `SetCachedRenderTargets` | Direct null-check release of `g_pRenderTarget` | SIMPLIFIED |
-| `FatalError` on bad `TestCooperativeLevel` | Calls `FatalError(...)` — does not return | Comment noting this | **MISSING** |
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| Hash Algorithm | Unknown (CRC32/FNV/custom) | FNV-1a implemented | 🔄 DIFFERS |
+| RegisterMessageHandler | @ 00eb59ce, stores (msgID, handler, dest, paramType) | Implemented (linear table) | ⚠️ PARTIAL |
+| Dispatch Table | Hash table or array | Linear array (256 slots) | 🔄 DIFFERS |
+| Message ID Storage | Stored with handler | Not stored yet | 🔲 MISSING |
+| DispatchMessage | Lookup by ID, call handler | Skeleton implemented | 🔲 MISSING |
+| Message Names | "iMsgDeleteEventHandler", "iMsgDoRender", etc. | Not registered | 🔲 MISSING |
+
+**Impact:** Message dispatch infrastructure exists but mapping and actual dispatch are incomplete.
+
+**Recommendation:** Add msgID field to `MessageHandler` struct, implement hash table lookup.
 
 ---
 
-## 9. DirectInput Management
+## 4. Audio Command Queue
 
-| Aspect | Original | C++ | Status |
-|--------|----------|-----|--------|
-| Acquire cursor control | `Ordinal_5(0)` — custom cursor hide | `ShowCursor(FALSE)` | MINOR DIFFERS |
-| Unacquire cursor control | `Ordinal_5(1)` — custom cursor show | `ShowCursor(TRUE)` | MINOR DIFFERS |
-| Fatal error on failure | `FUN_0066f810` on acquire failure | No error checking | **MISSING** |
-| DirectInput enumeration | `FUN_00688370(4, 0)` in `InitGameSubsystems` | Not implemented | **MISSING** (in stub) |
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| Queue Structure | @ DAT_00be82ac, ring buffer or linked list | Ring buffer (32 slots) | ✅ MATCH |
+| Command Structure | Opcode, params, callback, status | Same | ✅ MATCH |
+| Audio Thread | Created @ DAT_00bf1b30 via FUN_00611940 | `g_hAudioThread` declared | 🔲 MISSING |
+| EnqueueAudioCommand | Adds command to queue | Implemented | ✅ MATCH |
+| AudioPollGate | @ 006109d0, returns -2/0/1 | Implemented | ✅ MATCH |
+| Thread Worker | Processes queue asynchronously | Not implemented | 🔲 MISSING |
+| Async Init | Open → Query → Configure → Start | Not implemented | 🔲 MISSING |
 
----
+**Impact:** Audio queue structure is ready, but thread creation and processing logic are missing.
 
-## 10. Pause/Resume System
-
-| Aspect | Original | C++ | Status |
-|--------|----------|-----|--------|
-| Full pause | Triggers animation, vtable+0x24 on all systems, records pause time | State machine skeleton without vtable calls | **MISSING** |
-| Audio-only pause | Pauses systems via vtable | State machine skeleton | **MISSING** |
-| Full resume | Triggers animation, vtable+0x28 on all systems | State machine skeleton | **MISSING** |
-| `PauseAudioManager` | Checks music, calls `FUN_006a9ea0` | Empty stub | **MISSING** |
-| `ProcessDeferredCallbacks` | Processes linked list at `DAT_00bef7c0` within 2ms | Empty stub | **MISSING** |
+**Recommendation:** Implement `CreateThread` call and worker function that processes queue in loop.
 
 ---
 
-## 11. Global Variable Mapping
+## 5. Scene Management
 
-| Original address | C++ variable | Status |
-|-----------------|-------------|--------|
-| `DAT_00bef6cc` | `ghWnd` | OK |
-| `DAT_008afbd9` | `bIsFullscreen` | OK |
-| `DAT_00bef6c7` | `g_bHasFocusLost` | OK |
-| `DAT_00bef67e` | `g_bCursorVisible` | OK |
-| `DAT_00bef6d8` | `g_dwDelayedOpTimer` | OK |
-| `DAT_00bef6d7` | `g_bGameUpdateEnabled` | OK |
-| `DAT_00bef6d4` | `g_bAudioWasPaused` | OK |
-| `DAT_00bef6d5` | `g_bUpdatesWerePaused` | OK |
-| `DAT_00bf18aa` | `g_bDeviceLost` | OK |
-| `DAT_00c7b908` | `g_nPauseState` | OK |
-| `DAT_008afb08` | `g_nMinFreeMemory` | OK (stub returns 0, so never updates) |
-| `DAT_00bef6c5` | `g_bExitRequested` | OK |
-| `DAT_00bef6c6` | `g_bSubsysInitialized` | OK |
-| `DAT_00bef6d0` | `g_pComObject` (declared, never created) | **MISSING** factory |
-| `DAT_00e6b384` | RealInputSystem — not exposed as a global | **MISSING** |
-| `DAT_00b94af8` | `g_d3dpp` | OK |
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| Scene IDs | DAT_00c82b00 (focus-lost), DAT_00c82b08 (focus-gain), DAT_00c82ac8 (current) | `SceneIDs g_SceneIDs` | ✅ MATCH |
+| Three-ID System | Compared in `UpdateCursorVisibilityAndScene` | Structure declared | ⚠️ PARTIAL |
+| LoadSceneIDs | Loads from level data or scripting | Stubbed | 🔲 MISSING |
+| SwitchRenderOutputMode | @ 00612530, notifies listeners | `SwitchRenderOutputModeEx()` partial | ⚠️ PARTIAL |
+| Scene Listeners | Linked list or array of callbacks | Not implemented | 🔲 MISSING |
+| Pending-Change Flag | @ listener_list.head+0x12 | Not implemented | 🔲 MISSING |
+| FlushDeferredSceneListeners | @ 006125a0 | Stubbed | 🔲 MISSING |
+
+**Impact:** Scene management structure exists but listener notification is incomplete.
+
+**Recommendation:** Implement listener list as `std::vector` or linked list, add registration function.
 
 ---
 
-## Summary: Priority Fixes for Next Iteration
+## 6. Deferred Render Queue
 
-**High priority (functional correctness):**
-1. Add `CLI_CommandParser_ParseArgs()` stub call before single-instance check in WinMain
-2. Add `UpdateCursorVisibilityAndScene()` call in `WM_ACTIVATE` focus-loss path (with cursor-visible=true)
-3. Add `UpdateCursorVisibilityAndScene()` call in `WM_ACTIVATE` focus-gain path (with cursor-visible=false)
-4. Add TODO for RealInputSystem vtable input re-acquire in `WM_ACTIVATE` focus-gain path
-5. Add `AudioStream_Resume()` stub call on delayed-timer expiry in `MainLoop`
-6. Add primary callback TODO in `GameFrameUpdate` (`UpdateFrameTimingPrimary + (*DAT_008e1644[0])`)
-7. Add secondary callback TODO in `GameFrameUpdate` (`InterpolateFrameTime + (*DAT_008e1644[1])`)
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| Queue Head | @ DAT_00bef7c0, linked list | `RenderBatchNode* g_pDeferredRenderQueue` | ✅ MATCH |
+| Node Structure | Next pointer @ +0x7c | `RenderBatchNode` with next @ end | ✅ MATCH |
+| Shader Type Hash | BLOOM, GLASS, BACKDROP, etc. | Declared in struct | ✅ MATCH |
+| BuildRenderBatch | @ 0063d600, sorts by shader | Stubbed | 🔲 MISSING |
+| ProcessDeferredRenderQueue | 2ms time budget | Implemented (iteration only) | ⚠️ PARTIAL |
+| Time Budget Check | `timeGetTime()` loop | Implemented | ✅ MATCH |
+| Shader Recognition | String/hash/enum comparison | Not implemented | 🔲 MISSING |
 
-**Medium priority (structural fidelity):**
-8. Add engine object factory TODO in WinMain (before `PreDirectXInit`): creates `g_pComObject`
-9. Add missing `thunk_FUN_00ec04dc()` and `thunk_FUN_00ec19b5()` TODO stubs in DX resource management
-10. Fix `RegisterWindowClass`: apply `CS_OWNDC | CS_DBLCLKS` only in fullscreen; add `CS_VREDRAW | CS_HREDRAW` in windowed mode
-11. Implement `SaveOptionsOnExit`: write OptionResolution/LOD/Brightness to registry
+**Impact:** Queue iteration works, but batch building (shader sorting, D3D calls) is missing.
 
-**Low priority (implementation details):**
-12. `AcquireInputDevices`/`UnacquireInputDevices`: note `Ordinal_5` stub difference
-13. Add error checking in `AcquireInputDevices` (fatal error on failure)
-14. `RestoreDirectXResources`: add hardware capability check (`TextureOpCaps & 0x80`) before texture RT path
+**Recommendation:** Implement shader type hash table and D3D state sorting logic.
+
+---
+
+## 7. Memory Allocator
+
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| AllocEngineObject | @ 00614210, debug-aware with tags | Implemented | ✅ MATCH |
+| Alloc Header | Tag, size, next, magic | Same | ✅ MATCH |
+| Magic Number | 0xDEADBEEF corruption detection | Same | ✅ MATCH |
+| Tracking List | Global linked list for leak detection | Declared, not updated | ⚠️ PARTIAL |
+| Per-Tag Stats | Memory usage by tag | Not implemented | 🔲 MISSING |
+| Free Lists | @ allocator+0x428, 254 buckets | Not implemented | 🔲 MISSING |
+| Critical Section | @ allocator+0x4e4, thread-safe | Not implemented | 🔲 MISSING |
+| FreeEngineObject | Releases memory | Implemented | ✅ MATCH |
+
+**Impact:** Basic allocation works, but tracking and stats are incomplete.
+
+**Recommendation:** Add global tracking list updates in alloc/free, implement stats query function.
+
+---
+
+## 8. Timing System
+
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| Fixed-Point Format | 64-bit 16.16 | Same | ✅ MATCH |
+| Callback Interval | @ DAT_00c83190/94, likely 16ms (60 FPS) | `g_ullCallbackInterval` declared | ⚠️ PARTIAL |
+| Interval Initialization | Set in `InitFrameCallbackSystem` or first `GameFrameUpdate` | Not set | 🔲 MISSING |
+| Game Tick Counter | @ DAT_00c83110, incremented by localTick * 3 | `g_dwGameTicks` implemented | ✅ MATCH |
+| Time Scale | * 3 / 0x10000 | Same | ✅ MATCH |
+| TimeManager Singleton | @ DAT_00bef768, vtable + isPaused | `TimeManager*` declared | ⚠️ PARTIAL |
+| Pause Flag | @ +0x04, 0=running | Declared in struct | ✅ MATCH |
+| UpdateFrameTimingPrimary | Checks pause, updates ticks | Not implemented | 🔲 MISSING |
+| InterpolateFrameTime | Smooth interpolation | Not implemented | 🔲 MISSING |
+
+**Impact:** Timing infrastructure exists but callback dispatch and interpolation are missing.
+
+**Recommendation:** Set `g_ullCallbackInterval = 16 << 16` in init, implement primary/secondary timing updates.
+
+---
+
+## 9. DirectX Device Creation
+
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| CreateD3DDevice | @ 0067c290, 9 parameters | Function exists | ⚠️ PARTIAL |
+| Parameter 1 | Client height | Passed | ✅ MATCH |
+| Parameters 2-9 | Adapter, flags, quality, booleans | Unknown/stubbed | 🔲 MISSING |
+| Device Storage | @ DAT_00bf1920 (IDirect3DDevice9*) | `g_pd3dDevice` | ✅ MATCH |
+| Interface Storage | @ DAT_00bf1924 (IDirect3D9*) | `g_pD3D` | ✅ MATCH |
+| Shader Capability Level | @ DAT_00bf1994, set from D3DCAPS9 | Not set | 🔲 MISSING |
+| NotifyPreReleaseResources | @ 00ec04dc, flush/save state | Stubbed | 🔲 MISSING |
+| NotifyPostReleaseResources | @ 00ec19b5, clear caches | Stubbed | 🔲 MISSING |
+
+**Impact:** Device creation parameters need clarification for correct initialization.
+
+**Recommendation:** Decompile `CreateD3DDevice` to determine all 9 parameters, implement resource notification.
+
+---
+
+## 10. Subsystem Structures
+
+### GlobalTempBuffer (DAT_00e6b378)
+
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| Size | 0x3c bytes (60) | Same | ✅ MATCH |
+| Callback Count | @ +0x0d, max 5 | Declared | ✅ MATCH |
+| Callback Pairs | Function + context ptrs | Declared | ✅ MATCH |
+| Allocation | Via `AllocEngineObject` | `GlobalTempBuffer*` declared | 🔲 MISSING |
+
+### RealGraphSystem (DAT_00e6b390)
+
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| Size | 8 bytes | Same | ✅ MATCH |
+| Vtable | @ PTR_FUN_00885010 | Declared | ✅ MATCH |
+| Callback Mgr Ptr | @ +0x04, points to DAT_00e6e874 | Declared | ✅ MATCH |
+| Allocation | Via engine object factory | Not allocated | 🔲 MISSING |
+
+### TimeManager (DAT_00bef768)
+
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| Size | 8 bytes | Same | ✅ MATCH |
+| isPaused Flag | @ +0x04 | Declared | ✅ MATCH |
+| Creation | In `FUN_0060b740` | Not created | 🔲 MISSING |
+
+**Impact:** Subsystem structures are defined but not allocated/initialized.
+
+**Recommendation:** Implement factory functions and lifecycle management.
+
+---
+
+## 11. Subsystem Initialization Functions
+
+| Function | Original | C++ Implementation | Status |
+|----------|----------|-------------------|--------|
+| InitLanguageResources | @ 00eb87ba, loads string tables | Stubbed | 🔲 MISSING |
+| InitVideoCodec | @ 00eb88b2, Bink/Smacker init | Stubbed | 🔲 MISSING |
+| FinalizeRenderInit | @ 006677c0, shaders/textures | Stubbed | 🔲 MISSING |
+
+**Impact:** Subsystem content (strings, videos, shaders) not loaded.
+
+**Recommendation:** Decompile these functions to understand file loading and initialization.
+
+---
+
+## 12. Cleanup and Teardown
+
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| RenderAndAudioTeardown | @ 00ec6610, 3-step audio shutdown | TODO comment | 🔲 MISSING |
+| Engine Object Destroy | Via callback_mgr+0xc destructor | TODO comment | 🔲 MISSING |
+| SaveOptionsOnExit | @ 00eb4a5d, writes 3 settings | Stubbed | ⚠️ PARTIAL |
+| RealInputSystem Pause | Via vtable call | TODO comment | 🔲 MISSING |
+| UnacquireInputDevices | Releases DirectInput devices | Implemented | ✅ MATCH |
+| System Param Restore | `SaveOrRestoreSystemParameters(true)` | Implemented | ✅ MATCH |
+
+**Impact:** Cleanup is incomplete, may cause resource leaks or crashes on exit.
+
+**Recommendation:** Implement proper teardown order: audio → render → input → engine objects.
+
+---
+
+## 13. Registry System
+
+| Component | Original | C++ Implementation | Status |
+|-----------|----------|-------------------|--------|
+| HKCU → HKLM Fallback | Yes | Yes | ✅ MATCH |
+| Write-back to HKCU | On HKLM hit | Yes | ✅ MATCH |
+| Auto-create in HKCU | With default value | Yes | ✅ MATCH |
+| std::basic_string Use | Internally uses C++ strings | Uses C strings | 🔄 DIFFERS |
+
+**Impact:** Functional equivalence despite implementation difference.
+
+---
+
+## 14. Implementation Approach Differences
+
+### Memory Layout
+
+| Aspect | Original | C++ Implementation | Impact |
+|--------|----------|-------------------|--------|
+| Global Variables | Fixed addresses (DAT_*) | C++ globals (g_*) | 🔄 DIFFERS - Functionally equivalent |
+| Heap Allocation | Custom allocator with free lists | `malloc`/`free` with debug headers | 🔄 DIFFERS - Simplified |
+| Structures | Raw memory offsets | C++ structs | 🔄 DIFFERS - Better type safety |
+| VTables | Manual vtable pointers | Potential C++ virtual classes | 🔄 DIFFERS - Cleaner code |
+
+### Code Organization
+
+| Aspect | Original | C++ Implementation | Impact |
+|--------|----------|-------------------|--------|
+| Functions | Scattered across binary | Logically grouped in main.cpp | 🔄 DIFFERS - Better readability |
+| Magic Numbers | Embedded constants | Named #define constants | 🔄 DIFFERS - Self-documenting |
+| Jumps | Assembly jumps and gotos | Structured control flow | 🔄 DIFFERS - Maintainable |
+| Hard-coded Addresses | Yes | None | 🔄 DIFFERS - Portable |
+
+---
+
+## Summary of Gaps (Priority Order)
+
+### High Priority (Blocks Functionality)
+
+1. **Engine Object Factory Creation** - Without this, subsystems can't initialize
+2. **Frame Callback Dispatch** - Game logic and rendering won't update
+3. **Audio Thread Creation** - Audio initialization will hang
+4. **Callback Interval Initialization** - Frame timing won't work correctly
+
+### Medium Priority (Reduces Accuracy)
+
+5. **Message Dispatch Mapping** - Event system won't route correctly
+6. **Scene Listener List** - Scene transitions won't notify properly
+7. **Render Batch Building** - Rendering won't be optimized
+8. **DirectX Parameter Clarification** - Device may not initialize correctly
+9. **Shader Capability Detection** - Wrong shader path may be used
+
+### Low Priority (Nice to Have)
+
+10. **Memory Allocator Stats** - Leak detection and profiling unavailable
+11. **Subsystem Initialization Details** - Content won't load (strings, videos, shaders)
+12. **Proper Teardown** - May cause leaks, but doesn't affect gameplay
+13. **CLI Parser Implementation** - Command-line args won't be parsed correctly
+
+---
+
+## Next Iteration Focus
+
+Based on this analysis, Iteration 6 should prioritize:
+
+1. Implement engine object factory with magic number
+2. Hook up frame callback dispatch (primary/secondary)
+3. Set callback interval (16ms or 33ms)
+4. Implement message dispatch lookup and dispatch logic
+5. Create audio thread and worker function
+6. Clarify DirectX device parameters
+
+These changes will significantly improve functional equivalence with the original binary.

@@ -117,6 +117,97 @@ enum GamePauseState {
     PAUSE_STATE_RESUME  = 7,
 };
 
+// ── Iteration 5: New Subsystem Structures ────────────────────────────────────
+
+// Frame callback slot structure (DAT_00e6e880 - 8 slots, 0x1c bytes total)
+struct CallbackSlot {
+    void (*func)(void* context);  // Callback function pointer
+    void* context;                 // Context data passed to callback
+};
+
+// Audio command structure for async audio operations
+enum AudioCommandType {
+    AUDIO_CMD_NONE = 0,
+    AUDIO_CMD_OPEN_DEVICE = 1,
+    AUDIO_CMD_QUERY_CAPS = 2,
+    AUDIO_CMD_CONFIGURE = 3,
+    AUDIO_CMD_START_STREAM = 4,
+    AUDIO_CMD_STOP_STREAM = 5,
+};
+
+struct AudioCommand {
+    AudioCommandType opcode;
+    void* params;
+    void (*callback)(int status);
+    int status;  // -2=error, 0=pending, 1=complete
+};
+
+// Message dispatch handler structure
+struct MessageHandler {
+    void (*handler)(void* dest, void* params);
+    void* dest;
+    int paramType;
+};
+
+// Scene IDs for three-ID scene management system
+struct SceneIDs {
+    int focusLost;  // DAT_00c82b00 - Menu/pause screen
+    int focusGain;  // DAT_00c82b08 - Active gameplay
+    int current;    // DAT_00c82ac8 - Current/target scene
+};
+
+// Render batch node for deferred rendering queue
+struct RenderBatchNode {
+    // Shader and material info
+    DWORD shaderTypeHash;
+    void* material;
+    void* geometry;
+    
+    // Transform (simplified - actual might be 4x4 matrix)
+    float transform[16];
+    
+    // Flags
+    DWORD flags;
+    
+    // Unknown fields up to next pointer
+    char unknown[0x7c - 0x44];
+    
+    // Next pointer at +0x7c
+    RenderBatchNode* next;
+};
+
+// TimeManager structure (DAT_00bef768 - 8 bytes)
+struct TimeManager {
+    void* vtable;     // +0x00
+    DWORD isPaused;   // +0x04 (0=running, non-zero=paused)
+};
+
+// GlobalTempBuffer structure (DAT_00e6b378 - 0x3c bytes)
+struct GlobalTempBuffer {
+    BYTE unknown_header[3];
+    void* callback_funcs[5];
+    void* callback_contexts[5];
+    BYTE callback_count;  // Max 5
+    BYTE additional_data[16];  // Fill to 0x3c
+};
+
+// RealGraphSystem structure (DAT_00e6b390 - 8 bytes)
+struct RealGraphSystem {
+    void* vtable;                    // +0x00
+    void* callback_mgr_secondary;    // +0x04
+};
+
+// Scene listener callback type
+typedef void (*SceneListenerCallback)(int newSceneID);
+
+// Memory allocation header (for AllocEngineObject tracking)
+struct AllocHeader {
+    const char* tag;
+    size_t size;
+    AllocHeader* next;
+    DWORD magic;  // 0xDEADBEEF
+};
+
 // ── Function prototypes ───────────────────────────────────────────────────────
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd);
 HWND CreateGameWindow(HINSTANCE hInstance, int width, int height);
@@ -156,9 +247,41 @@ void UpdateCursorVisibilityAndScene();     // FUN_00ea53ca
 
 // Render mode switching
 void SwitchRenderOutputMode();             // FUN_00612530 — dispatches to render listener list
+void SwitchRenderOutputModeEx(int sceneID); // Enhanced version with scene ID parameter
 
-// Memory allocator query
+// Memory allocator (Iteration 5)
+void* AllocEngineObject(size_t size, const char* tag);  // FUN_00614210 — debug-aware allocator
+void FreeEngineObject(void* ptr);
 SIZE_T QueryMemoryAllocatorMax();          // thunk_FUN_00eb6dbc — returns largest free block in allocator
+
+// Message dispatch system (Iteration 5)
+void RegisterMessageHandler(void* dest, const char* msgName, int paramType);  // FUN_00eb59ce
+void DispatchMessage(DWORD msgID, void* params);
+DWORD HashMessageName(const char* msgName);  // Hash function for message dispatch
+
+// Frame callback system (Iteration 5)
+void InitFrameCallbackSystem();  // FUN_00eb8744 — clears callback slots
+void RegisterFrameCallback(void (*func)(void*), void* context);
+void InvokeFrameCallbacks();
+
+// Audio command queue (Iteration 5)
+void InitAudioCommandQueue();
+void EnqueueAudioCommand(AudioCommandType opcode, void* params, void (*callback)(int));
+int AudioPollGate();  // FUN_006109d0 — returns -2/0/1 (error/pending/complete)
+
+// Scene management (Iteration 5)
+void LoadSceneIDs();
+void NotifySceneListeners(int newSceneID);
+void FlushDeferredSceneListeners();  // FUN_006125a0
+
+// Render queue (Iteration 5)
+void BuildRenderBatch();  // FUN_0063d600 — builds and sorts render batches
+void ProcessDeferredRenderQueue();
+
+// Subsystem initialization (Iteration 5)
+void InitLanguageResources();  // FUN_00eb87ba — loads string tables
+void InitVideoCodec();         // FUN_00eb88b2 — initializes FMV codec
+void FinalizeRenderInit();     // FUN_006677c0 — finalizes render setup
 
 // DirectInput functions
 void UnacquireInputDevices();
@@ -236,5 +359,46 @@ extern SIZE_T        g_nMinFreeMemory;       // DAT_008afb08 low-water mark
 extern bool          g_bSubsysInitialized;  // DAT_00bef6c6 — set to 1 after InitGameSubsystems
 extern char          g_szCmdLine1[CMDLINE_BUFFER_SIZE];
 extern char          g_szCmdLine2[CMDLINE_BUFFER_SIZE];
+
+// ── Iteration 5: New subsystem globals ───────────────────────────────────────
+
+// Frame callback slots (DAT_00e6e880 - 8 slots)
+extern CallbackSlot g_FrameCallbackSlots[8];
+
+// Scene management
+extern SceneIDs g_SceneIDs;
+
+// Deferred render queue
+extern RenderBatchNode* g_pDeferredRenderQueue;  // DAT_00bef7c0
+
+// TimeManager singleton
+extern TimeManager* g_pTimeManager;  // DAT_00bef768
+
+// Message dispatch table
+#ifndef MESSAGE_DISPATCH_TABLE_SIZE
+#define MESSAGE_DISPATCH_TABLE_SIZE 256
+#endif
+extern MessageHandler g_MessageDispatchTable[MESSAGE_DISPATCH_TABLE_SIZE];
+extern int g_nMessageHandlerCount;
+
+// Audio command queue
+#ifndef AUDIO_COMMAND_QUEUE_SIZE
+#define AUDIO_COMMAND_QUEUE_SIZE 32
+#endif
+extern AudioCommand g_AudioCommandQueue[AUDIO_COMMAND_QUEUE_SIZE];
+extern int g_nAudioQueueHead;
+extern int g_nAudioQueueTail;
+extern HANDLE g_hAudioThread;  // DAT_00bf1b30
+
+// Subsystem objects
+extern GlobalTempBuffer* g_pGlobalTempBuffer;   // DAT_00e6b378
+extern RealGraphSystem* g_pRealGraphSystem;     // DAT_00e6b390
+
+// Engine root object
+extern void* g_pEngineRootObject;  // DAT_00bef6d0 (2904 bytes)
+
+// Callback manager entries
+extern void* g_pCallbackManager_Primary;    // DAT_00e6e870
+extern void* g_pCallbackManager_Secondary;  // DAT_00e6e874
 
 #endif // GLOBALS_H

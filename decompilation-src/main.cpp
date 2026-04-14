@@ -57,6 +57,24 @@ bool  g_bSubsysInitialized = false;
 char g_szCmdLine1[CMDLINE_BUFFER_SIZE] = {0};
 char g_szCmdLine2[CMDLINE_BUFFER_SIZE] = {0};
 
+// ── Iteration 5: New subsystem globals ───────────────────────────────────────
+
+CallbackSlot g_FrameCallbackSlots[8] = {{NULL, NULL}};
+SceneIDs g_SceneIDs = {0, 0, 0};
+RenderBatchNode* g_pDeferredRenderQueue = NULL;
+TimeManager* g_pTimeManager = NULL;
+MessageHandler g_MessageDispatchTable[MESSAGE_DISPATCH_TABLE_SIZE] = {{NULL, NULL, 0}};
+int g_nMessageHandlerCount = 0;
+AudioCommand g_AudioCommandQueue[AUDIO_COMMAND_QUEUE_SIZE];  // Will be zeroed by InitAudioCommandQueue
+int g_nAudioQueueHead = 0;
+int g_nAudioQueueTail = 0;
+HANDLE g_hAudioThread = NULL;
+GlobalTempBuffer* g_pGlobalTempBuffer = NULL;
+RealGraphSystem* g_pRealGraphSystem = NULL;
+void* g_pEngineRootObject = NULL;
+void* g_pCallbackManager_Primary = NULL;
+void* g_pCallbackManager_Secondary = NULL;
+
 // ── Registry helpers ──────────────────────────────────────────────────────────
 
 int ReadRegistrySetting(const char* appName, const char* section,
@@ -672,6 +690,238 @@ DWORD GetGameTime() {
         g_dwStartupTime = t;
     }
     return t - g_dwStartupTime;
+}
+
+// ── Iteration 5: New Subsystem Implementations ───────────────────────────────
+
+// ── Memory Allocator (AllocEngineObject) ──────────────────────────────────────
+void* AllocEngineObject(size_t size, const char* tag) {
+    // FUN_00614210: Debug-aware heap allocator with tracking
+    // Allocates header + requested size
+    AllocHeader* header = (AllocHeader*)malloc(sizeof(AllocHeader) + size);
+    if (!header) return NULL;
+    
+    header->tag = tag;
+    header->size = size;
+    header->next = NULL;
+    header->magic = 0xDEADBEEF;
+    
+    // TODO: Add to global tracking list
+    // TODO: Update stats by tag
+    
+    return (void*)(header + 1);
+}
+
+void FreeEngineObject(void* ptr) {
+    if (!ptr) return;
+    
+    AllocHeader* header = ((AllocHeader*)ptr) - 1;
+    
+    // Verify magic number (corruption detection)
+    if (header->magic != 0xDEADBEEF) {
+        // Corruption detected!
+        return;
+    }
+    
+    // TODO: Remove from tracking list
+    // TODO: Update stats by tag
+    
+    free(header);
+}
+
+// ── Message Dispatch System ───────────────────────────────────────────────────
+
+// Simple hash function for message names (FNV-1a style)
+DWORD HashMessageName(const char* msgName) {
+    DWORD hash = 2166136261u;  // FNV offset basis
+    while (*msgName) {
+        hash ^= (DWORD)*msgName++;
+        hash *= 16777619u;  // FNV prime
+    }
+    return hash;
+}
+
+void RegisterMessageHandler(void* dest, const char* msgName, int paramType) {
+    // FUN_00eb59ce: Register string-based message handler
+    if (g_nMessageHandlerCount >= MESSAGE_DISPATCH_TABLE_SIZE) return;
+    
+    DWORD msgID = HashMessageName(msgName);
+    
+    // Store in dispatch table (simple linear array for now)
+    MessageHandler* handler = &g_MessageDispatchTable[g_nMessageHandlerCount++];
+    handler->handler = NULL;  // TODO: Set actual handler function
+    handler->dest = dest;
+    handler->paramType = paramType;
+    
+    // TODO: Store msgID mapping
+}
+
+void DispatchMessage(DWORD msgID, void* params) {
+    // Lookup message ID and dispatch to handler
+    for (int i = 0; i < g_nMessageHandlerCount; i++) {
+        // TODO: Check if msgID matches
+        // if (g_MessageDispatchTable[i].msgID == msgID) {
+        //     g_MessageDispatchTable[i].handler(
+        //         g_MessageDispatchTable[i].dest, params);
+        //     return;
+        // }
+    }
+}
+
+// ── Frame Callback System ─────────────────────────────────────────────────────
+
+void InitFrameCallbackSystem() {
+    // FUN_00eb8744: Initialize frame callback system
+    // Clears all 8 callback slots
+    for (int i = 0; i < 8; i++) {
+        g_FrameCallbackSlots[i].func = NULL;
+        g_FrameCallbackSlots[i].context = NULL;
+    }
+}
+
+void RegisterFrameCallback(void (*func)(void*), void* context) {
+    // Find empty slot and register callback
+    for (int i = 0; i < 8; i++) {
+        if (g_FrameCallbackSlots[i].func == NULL) {
+            g_FrameCallbackSlots[i].func = func;
+            g_FrameCallbackSlots[i].context = context;
+            return;
+        }
+    }
+}
+
+void InvokeFrameCallbacks() {
+    // Call all registered frame callbacks
+    for (int i = 0; i < 8; i++) {
+        if (g_FrameCallbackSlots[i].func != NULL) {
+            g_FrameCallbackSlots[i].func(g_FrameCallbackSlots[i].context);
+        }
+    }
+}
+
+// ── Audio Command Queue ───────────────────────────────────────────────────────
+
+void InitAudioCommandQueue() {
+    g_nAudioQueueHead = 0;
+    g_nAudioQueueTail = 0;
+    
+    for (int i = 0; i < AUDIO_COMMAND_QUEUE_SIZE; i++) {
+        g_AudioCommandQueue[i].opcode = AUDIO_CMD_NONE;
+        g_AudioCommandQueue[i].params = NULL;
+        g_AudioCommandQueue[i].callback = NULL;
+        g_AudioCommandQueue[i].status = 0;
+    }
+}
+
+void EnqueueAudioCommand(AudioCommandType opcode, void* params, void (*callback)(int)) {
+    int nextTail = (g_nAudioQueueTail + 1) % AUDIO_COMMAND_QUEUE_SIZE;
+    if (nextTail == g_nAudioQueueHead) {
+        // Queue full
+        return;
+    }
+    
+    AudioCommand* cmd = &g_AudioCommandQueue[g_nAudioQueueTail];
+    cmd->opcode = opcode;
+    cmd->params = params;
+    cmd->callback = callback;
+    cmd->status = 0;  // Pending
+    
+    g_nAudioQueueTail = nextTail;
+}
+
+int AudioPollGate() {
+    // FUN_006109d0: Poll audio async operation status
+    // Returns: -2=error, 0=pending, 1=complete
+    
+    if (g_nAudioQueueHead == g_nAudioQueueTail) {
+        // Queue empty, nothing pending
+        return 1;
+    }
+    
+    AudioCommand* cmd = &g_AudioCommandQueue[g_nAudioQueueHead];
+    return cmd->status;
+}
+
+// ── Scene Management ──────────────────────────────────────────────────────────
+
+void LoadSceneIDs() {
+    // Initialize scene IDs (would load from data in real implementation)
+    g_SceneIDs.focusLost = 0;
+    g_SceneIDs.focusGain = 0;
+    g_SceneIDs.current = 0;
+    
+    // TODO: Load actual scene IDs from level data or scripting
+}
+
+void NotifySceneListeners(int newSceneID) {
+    // Iterate scene listener list and call callbacks
+    // TODO: Implement listener list iteration
+}
+
+void FlushDeferredSceneListeners() {
+    // FUN_006125a0: Flush deferred scene transition listeners
+    // Called when pending-change flag is set
+    // TODO: Process queued scene transition callbacks
+}
+
+void SwitchRenderOutputModeEx(int sceneID) {
+    // FUN_00612530: Switch render output mode based on scene
+    // TODO: Check pending-change flag
+    // TODO: Call FlushDeferredSceneListeners if needed
+    // TODO: Notify all registered listeners
+    
+    g_SceneIDs.current = sceneID;
+    NotifySceneListeners(sceneID);
+}
+
+// ── Deferred Render Queue ─────────────────────────────────────────────────────
+
+void BuildRenderBatch() {
+    // FUN_0063d600: Build and sort render batch by shader type
+    // TODO: Recognize shader types (BLOOM, GLASS, BACKDROP)
+    // TODO: Batch draw calls to minimize state changes
+}
+
+void ProcessDeferredRenderQueue() {
+    // Process render queue with 2ms budget
+    DWORD startTime = GetGameTime();
+    
+    RenderBatchNode* node = g_pDeferredRenderQueue;
+    while (node != NULL) {
+        // Check time budget
+        DWORD elapsed = GetGameTime() - startTime;
+        if (elapsed >= DEFERRED_QUEUE_BUDGET_MS) {
+            break;  // Budget exhausted, continue next frame
+        }
+        
+        // Process node
+        BuildRenderBatch();
+        
+        // Move to next
+        RenderBatchNode* next = node->next;
+        node = next;
+    }
+}
+
+// ── Subsystem Initialization Stubs ───────────────────────────────────────────
+
+void InitLanguageResources() {
+    // FUN_00eb87ba: Initialize language resource loading
+    // TODO: Load string tables from disk
+    // TODO: Initialize font system for localized glyphs
+}
+
+void InitVideoCodec() {
+    // FUN_00eb88b2: Initialize video codec (Bink/Smacker)
+    // TODO: Load codec DLL
+    // TODO: Initialize decoder context
+}
+
+void FinalizeRenderInit() {
+    // FUN_006677c0: Finalize render initialization
+    // TODO: Shader compiler init or load precompiled shaders
+    // TODO: Texture manager initialization
+    // TODO: D3DX helper initialization (fonts, sprites)
 }
 
 // ── Deferred render batch queue ───────────────────────────────────────────────
