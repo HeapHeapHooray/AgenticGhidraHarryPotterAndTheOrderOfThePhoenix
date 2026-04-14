@@ -581,3 +581,332 @@ Iteration 5 deepened our understanding of subsystem structures and implementatio
 - Q62: All command-line flags
 - Q68: Exact VS version
 - Q73-78: Cross-cutting concerns
+
+---
+
+## Iteration 8: High-Level Game Systems Questions
+
+### Spell System
+
+**Q79: How does the spell gesture recognition work?**
+- Is it mouse path matching?
+- Distance-based pattern recognition?
+- Time-based sequence detection?
+- What is the tolerance for inaccurate gestures?
+- Where is the gesture data stored?
+
+**Q80: What determines GOOD_CAST vs SUCCESSFUL_CAST?**
+- Accuracy threshold?
+- Speed of gesture?
+- Context-based (enemy hit, puzzle solved)?
+- Multiple success levels?
+
+**Q81: Where is the spell list data loaded from?**
+- Is `10.4_SpellList` a file path?
+- What format (text, binary, XML)?
+- How are spell parameters defined (damage, range, cooldown)?
+
+**Q82: How does the wand discipline system work?**
+- How are zones marked as WANDOUTPUNISH vs WANDOUTNOTPUNISH?
+- What is the punishment mechanism?
+- Which NPCs enforce the rules?
+- Is there a warning before punishment?
+
+**Q83: How is spell audio synchronized?**
+- Pre-cast audio (`AudioWingardiumCast`)?
+- During-cast audio?
+- Impact/effect audio?
+- How is 3D audio positioning handled?
+
+**Q84: What is SPELL_FINITE used for?**
+- Cancel all active spells?
+- Counter-spell mechanics?
+- End-of-combat cleanup?
+
+### Physics System (Havok)
+
+**Q85: How was the Havok version upgraded?**
+- Was data migrated from 3.x to 4.0?
+- Are there version-specific code paths?
+- Where is the version check performed?
+- Does it affect save game compatibility?
+
+**Q86: What are the 32 collision groups used for?**
+- Player vs environment?
+- NPC vs NPC?
+- Spell projectiles vs geometry?
+- Trigger volumes?
+- What is the collision matrix?
+
+**Q87: How is the MOPP data generated?**
+- At asset export time (RenderWare)?
+- Runtime generation?
+- Pre-computed and cached?
+- How large are MOPP trees?
+
+**Q88: What objects use keyframed motion?**
+- Moving platforms?
+- Elevators?
+- Animated doors?
+- Moving staircases (Grand Staircase)?
+- Cutscene-driven objects?
+
+**Q89: How does the deactivation system work?**
+- What triggers sleep?
+- How long before deactivation?
+- Spatial partitioning details?
+- Wake-up criteria (proximity, collision)?
+
+**Q90: How is Havok integrated with the game loop?**
+- Fixed timestep or variable?
+- Substeps for stability?
+- Where in the frame callback system?
+- Synchronization with render thread?
+
+### Zone Streaming
+
+**Q91: How are the 4 load zones selected?**
+- Player position-based?
+- Directional prediction (where player is heading)?
+- Priority system?
+- Manual level design placement?
+
+**Q92: What is the load/unload latency?**
+- How long does a zone take to load?
+- Asynchronous or blocks main thread?
+- Progress tracking?
+- Fallback if loading too slow?
+
+**Q93: How does HybridLoadZone differ from regular LoadZone?**
+- "Hybrid" = seamless + loading screen?
+- Different asset priorities?
+- Transition animation system?
+
+**Q94: What happens if player moves too fast?**
+- Unloaded zone entered before loading complete?
+- Forced loading screen?
+- Invisible walls?
+- Slow-down mechanics?
+
+**Q95: How much memory is allocated per zone?**
+- Fixed budget?
+- Dynamic based on zone complexity?
+- How is memory freed on unload?
+
+### Asset Loading
+
+**Q96: What is the RCB file format structure?**
+- Header layout?
+- Animation keyframe encoding?
+- Compression method?
+- Bone hierarchy data?
+
+**Q97: How does pre-allocation work?**
+- Header buffer size calculation?
+- Body buffer size calculation?
+- Where are sizes stored (in file header)?
+- Fallback if pre-allocation fails?
+
+**Q98: What is the "Babble" system?**
+- Dialogue trees?
+- Subtitle data?
+- Lip-sync data?
+- Localization handling?
+
+**Q99: How are Hull resources used?**
+- Physics collision hulls?
+- Simplified geometry for collision?
+- Per-LOD hulls?
+- Dynamic vs static hulls?
+
+**Q100: What are Spline resources for?**
+- Camera paths?
+- NPC patrol routes?
+- Object animation paths (flying keys, etc.)?
+- Cutscene camera splines?
+
+**Q101: How does Trinity Sequencer work?**
+- Scripting language or binary format?
+- Event timeline?
+- Actor control (camera, NPCs, props)?
+- Integration with gameplay systems?
+
+### Animation
+
+**Q102: How many blend shapes per character?**
+- Facial expression count?
+- Lip-sync phonemes?
+- Damage deformations?
+
+**Q103: How are blend shapes weighted?**
+- Animator keyframes?
+- Procedural (e.g., lip-sync from audio)?
+- Player input (e.g., facial expressions in cutscenes)?
+
+**Q104: What does blendSpecularTint do?**
+- Modify specular color per blend shape?
+- Used for sweating, blushing?
+- Per-vertex or per-material?
+
+**Q105: How is skeletal skinning performed?**
+- Vertex shader or CPU?
+- Matrix palette size (max bones)?
+- Dual quaternion skinning or linear blend?
+
+**Q106: What is the RCB animation compression?**
+- Keyframe reduction?
+- Quaternion compression?
+- Curve fitting?
+
+### AI System
+
+**Q107: How are personality states selected?**
+- Random on spawn?
+- Scripted per-NPC?
+- Time-of-day based?
+- Influenced by player actions?
+
+**Q108: How does the patrol system work?**
+- Cycle through locators in order?
+- Random locator selection?
+- Wait time at each locator?
+- Reaction to player proximity?
+
+**Q109: What triggers chase behavior?**
+- Line-of-sight?
+- Proximity?
+- Audio cues (spell cast, running)?
+- Alert propagation between NPCs?
+
+**Q110: How does the sidle system work?**
+- Automatic transition at ledge edge?
+- Player input required?
+- How is "Agent Can Sidle" capability checked?
+- Ledge detection algorithm?
+
+**Q111: What are mini-game AI parameters?**
+- NifflerTimeAttackMiniGameInfo contents?
+- Difficulty scaling?
+- Scoring system?
+
+**Q112: How does broadPhaseBorderBehaviour work?**
+- Physics boundary handling?
+- Teleport back vs collision?
+- Warning system before boundary?
+
+### UI System
+
+**Q113: What does UI versioning mean (2.0_, 4.0_)?**
+- Different layouts for different platforms?
+- Patched versions?
+- A/B testing remnants?
+
+**Q114: How are 32 buttons mapped?**
+- What does button 25-32 represent?
+- Keyboard + gamepad combined?
+- Touch screen support?
+
+**Q115: How does the message system work?**
+- MSG_ IDs in a lookup table?
+- Event queue?
+- Priority system?
+
+**Q116: How is the UI rendered?**
+- Separate UI render pass?
+- Immediate mode or retained mode?
+- Texture atlas for UI elements?
+
+**Q117: What is the memory card icon system?**
+- PS2 legacy code?
+- Still used on PS3/Xbox 360?
+- Icon format?
+
+### Cross-System Questions
+
+**Q118: How do spells interact with physics?**
+- Spell projectiles as rigid bodies?
+- Force application on hit?
+- Havok collision filters for spells?
+
+**Q119: How does AI react to spells?**
+- Dodge behavior?
+- Counter-spell?
+- Fear/flee state?
+- Damage calculation?
+
+**Q120: How are animations synchronized with physics?**
+- Root motion from animation?
+- Physics affects animation (ragdoll)?
+- Blend between animation and physics?
+
+**Q121: How does streaming affect AI?**
+- AI unloaded with zone?
+- AI state saved/restored?
+- Patrol routes spanning multiple zones?
+
+**Q122: How do cutscenes interact with all systems?**
+- Disable physics?
+- Override AI?
+- Lock player input?
+- Trinity Sequencer control?
+
+**Q123: How is the Havok-RenderWare pipeline integrated?**
+- Exporter plugins?
+- Runtime conversion?
+- Data validation?
+
+### Investigation Strategy for Iteration 9
+
+1. **Spell gesture recognition:**
+   - Search for mouse input tracking
+   - Look for pattern matching algorithms
+   - Find spell parameter tables
+
+2. **Havok physics integration:**
+   - Analyze hkPhysicsSystem creation
+   - Find collision group setup
+   - Locate physics step function
+
+3. **Zone streaming manager:**
+   - Find streaming state machine
+   - Analyze load zone selection
+   - Memory budget management
+
+4. **Animation system:**
+   - Analyze RCB file parsing
+   - Find blend shape application
+   - GPU skinning shader code
+
+5. **AI state machine:**
+   - Find AI update loop
+   - Analyze state transition logic
+   - Sidle system implementation
+
+6. **UI rendering:**
+   - Find UI render function
+   - Button mapping table
+   - Message dispatch system
+
+### Priority Questions for C++ Implementation
+
+**Critical:**
+- Q79: Spell gesture recognition (core gameplay)
+- Q90: Havok integration with game loop
+- Q91-94: Zone streaming mechanics
+- Q107-110: AI system architecture
+
+**High:**
+- Q96: RCB format (needed for animation)
+- Q101: Trinity Sequencer (cutscenes)
+- Q118-120: Cross-system interactions
+
+**Medium:**
+- Q81-84: Spell system details
+- Q85-89: Havok advanced features
+- Q102-106: Animation details
+- Q113-117: UI implementation
+
+**Low:**
+- Q111: Mini-game AI
+- Q112: Border behavior
+- Q121-123: Advanced integrations

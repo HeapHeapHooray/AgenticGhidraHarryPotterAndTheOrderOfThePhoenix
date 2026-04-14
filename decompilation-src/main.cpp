@@ -75,6 +75,20 @@ void* g_pEngineRootObject = NULL;
 void* g_pCallbackManager_Primary = NULL;
 void* g_pCallbackManager_Secondary = NULL;
 
+// ── Iteration 8: Audio and input system globals ──────────────────────────────
+
+DirectSoundContext* g_pDirectSoundContext = NULL;
+RealInputSystem* g_pRealInputSystem = NULL;
+bool g_bAudioThreadRunning = false;
+
+// ── Iteration 8: High-level game systems ─────────────────────────────────────
+
+SpellSystemState* g_pSpellSystem = NULL;
+hkPhysicsSystem* g_pHavokPhysics = NULL;
+StreamingManager* g_pStreamingManager = NULL;
+AssetManager* g_pAssetManager = NULL;
+UISystem* g_pUISystem = NULL;
+
 // ── Registry helpers ──────────────────────────────────────────────────────────
 
 int ReadRegistrySetting(const char* appName, const char* section,
@@ -964,13 +978,135 @@ int AudioPollGate() {
     return cmd->status;
 }
 
+// ── DirectSound Audio Helper Functions (Iteration 8) ─────────────────────────
+
+int OpenAudioDevice(void* params) {
+    // Create DirectSound device and primary buffer
+    if (g_pDirectSoundContext == NULL) {
+        g_pDirectSoundContext = (DirectSoundContext*)malloc(sizeof(DirectSoundContext));
+        if (g_pDirectSoundContext == NULL) {
+            return -2;  // Allocation failure
+        }
+        memset(g_pDirectSoundContext, 0, sizeof(DirectSoundContext));
+    }
+    
+    // Create DirectSound8 interface
+    HRESULT hr = DirectSoundCreate8(NULL, &g_pDirectSoundContext->pDirectSound, NULL);
+    if (FAILED(hr)) {
+        return -2;
+    }
+    
+    // Set cooperative level (DSSCL_PRIORITY allows format changes)
+    hr = g_pDirectSoundContext->pDirectSound->SetCooperativeLevel(ghWnd, DSSCL_PRIORITY);
+    if (FAILED(hr)) {
+        g_pDirectSoundContext->pDirectSound->Release();
+        g_pDirectSoundContext->pDirectSound = NULL;
+        return -2;
+    }
+    
+    // Create primary buffer
+    DSBUFFERDESC primaryDesc = {0};
+    primaryDesc.dwSize = sizeof(DSBUFFERDESC);
+    primaryDesc.dwFlags = DSBCAPS_PRIMARYBUFFER;
+    
+    hr = g_pDirectSoundContext->pDirectSound->CreateSoundBuffer(&primaryDesc, 
+        &g_pDirectSoundContext->pPrimaryBuffer, NULL);
+    if (FAILED(hr)) {
+        g_pDirectSoundContext->pDirectSound->Release();
+        g_pDirectSoundContext->pDirectSound = NULL;
+        return -2;
+    }
+    
+    // Set primary buffer format (44.1kHz, 16-bit stereo - standard for game audio)
+    g_pDirectSoundContext->waveFormat.wFormatTag = WAVE_FORMAT_PCM;
+    g_pDirectSoundContext->waveFormat.nChannels = 2;
+    g_pDirectSoundContext->waveFormat.nSamplesPerSec = 44100;
+    g_pDirectSoundContext->waveFormat.wBitsPerSample = 16;
+    g_pDirectSoundContext->waveFormat.nBlockAlign = 
+        (g_pDirectSoundContext->waveFormat.nChannels * g_pDirectSoundContext->waveFormat.wBitsPerSample) / 8;
+    g_pDirectSoundContext->waveFormat.nAvgBytesPerSec = 
+        g_pDirectSoundContext->waveFormat.nSamplesPerSec * g_pDirectSoundContext->waveFormat.nBlockAlign;
+    g_pDirectSoundContext->waveFormat.cbSize = 0;
+    
+    hr = g_pDirectSoundContext->pPrimaryBuffer->SetFormat(&g_pDirectSoundContext->waveFormat);
+    if (FAILED(hr)) {
+        // Non-fatal - continue with default format
+    }
+    
+    return 1;  // Success
+}
+
+int QueryAudioCaps(void* params) {
+    // Query DirectSound capabilities
+    if (g_pDirectSoundContext == NULL || g_pDirectSoundContext->pDirectSound == NULL) {
+        return -2;
+    }
+    
+    DSCAPS caps = {0};
+    caps.dwSize = sizeof(DSCAPS);
+    
+    HRESULT hr = g_pDirectSoundContext->pDirectSound->GetCaps(&caps);
+    if (FAILED(hr)) {
+        return -2;
+    }
+    
+    // Store capabilities in params (if provided)
+    // In real implementation, would copy caps to output structure
+    
+    return 1;  // Success
+}
+
+int ConfigureAudio(void* params) {
+    // Configure audio format (currently using hardcoded 44.1kHz stereo)
+    // In full implementation, would parse params to set custom format
+    
+    if (g_pDirectSoundContext == NULL) {
+        return -2;
+    }
+    
+    // Configuration already done in OpenAudioDevice
+    // Could modify format here based on params
+    
+    return 1;  // Success
+}
+
+int StartAudioStream(void* params) {
+    // Start audio playback
+    if (g_pDirectSoundContext == NULL || g_pDirectSoundContext->pSecondaryBuffer == NULL) {
+        return -2;
+    }
+    
+    HRESULT hr = g_pDirectSoundContext->pSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
+    if (FAILED(hr)) {
+        return -2;
+    }
+    
+    g_pDirectSoundContext->isPlaying = true;
+    return 1;  // Success
+}
+
+int StopAudioStream(void* params) {
+    // Stop audio playback
+    if (g_pDirectSoundContext == NULL || g_pDirectSoundContext->pSecondaryBuffer == NULL) {
+        return -2;
+    }
+    
+    HRESULT hr = g_pDirectSoundContext->pSecondaryBuffer->Stop();
+    if (FAILED(hr)) {
+        return -2;
+    }
+    
+    g_pDirectSoundContext->isPlaying = false;
+    return 1;  // Success
+}
+
 DWORD WINAPI AudioThreadProc(LPVOID lpParam) {
-    // Audio thread worker function
+    // Audio thread worker function (iteration 8: DirectSound implementation)
     // Processes commands from the audio command queue
     
-    bool bRunning = true;
+    g_bAudioThreadRunning = true;
     
-    while (bRunning) {
+    while (g_bAudioThreadRunning) {
         // Poll for commands
         if (g_nAudioQueueHead != g_nAudioQueueTail) {
             // Command available
@@ -981,28 +1117,23 @@ DWORD WINAPI AudioThreadProc(LPVOID lpParam) {
             
             switch (cmd->opcode) {
                 case AUDIO_CMD_OPEN_DEVICE:
-                    // TODO: Open DirectSound device
-                    // result = OpenAudioDevice(cmd->params);
+                    result = OpenAudioDevice(cmd->params);
                     break;
                     
                 case AUDIO_CMD_QUERY_CAPS:
-                    // TODO: Query audio capabilities
-                    // result = QueryAudioCaps(cmd->params);
+                    result = QueryAudioCaps(cmd->params);
                     break;
                     
                 case AUDIO_CMD_CONFIGURE:
-                    // TODO: Configure audio format
-                    // result = ConfigureAudio(cmd->params);
+                    result = ConfigureAudio(cmd->params);
                     break;
                     
                 case AUDIO_CMD_START_STREAM:
-                    // TODO: Start audio streaming
-                    // result = StartAudioStream(cmd->params);
+                    result = StartAudioStream(cmd->params);
                     break;
                     
                 case AUDIO_CMD_STOP_STREAM:
-                    // TODO: Stop audio streaming
-                    // result = StopAudioStream(cmd->params);
+                    result = StopAudioStream(cmd->params);
                     break;
                     
                 default:
@@ -1025,9 +1156,24 @@ DWORD WINAPI AudioThreadProc(LPVOID lpParam) {
             // Queue empty - sleep briefly to avoid busy-waiting
             Sleep(1);
         }
-        
-        // Check if we should exit (would need a global flag)
-        // bRunning = g_bAudioThreadRunning;
+    }
+    
+    // Cleanup DirectSound resources before thread exit
+    if (g_pDirectSoundContext) {
+        if (g_pDirectSoundContext->pSecondaryBuffer) {
+            g_pDirectSoundContext->pSecondaryBuffer->Release();
+            g_pDirectSoundContext->pSecondaryBuffer = NULL;
+        }
+        if (g_pDirectSoundContext->pPrimaryBuffer) {
+            g_pDirectSoundContext->pPrimaryBuffer->Release();
+            g_pDirectSoundContext->pPrimaryBuffer = NULL;
+        }
+        if (g_pDirectSoundContext->pDirectSound) {
+            g_pDirectSoundContext->pDirectSound->Release();
+            g_pDirectSoundContext->pDirectSound = NULL;
+        }
+        free(g_pDirectSoundContext);
+        g_pDirectSoundContext = NULL;
     }
     
     return 0;

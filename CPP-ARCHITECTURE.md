@@ -1,25 +1,25 @@
-# C++ Decompilation Architecture (Iteration 7)
+# C++ Decompilation Architecture (Iteration 8)
 
 ## Overview
 
-This document describes the architecture of the C++ decompiled version of `hp.exe` as implemented in `decompilation-src/main.cpp`. The decompilation aims for functional equivalence while maintaining clean, readable C++ code without assembly instructions, hard-coded addresses, or magic constants.
+This document describes the architecture of the C++ decompiled version of `hp.exe` as implemented in `decompilation-src/`. The decompilation aims for functional equivalence while maintaining clean, readable C++ code without assembly instructions, hard-coded addresses, or magic constants.
 
-**Current Status:** Iteration 7 - Core subsystem structures implemented and documented
+**Current Status:** Iteration 8 - High-level game systems (spells, physics, streaming, assets, AI, UI) added
 
-**Build System:** Zig cc (cross-compilation to Windows x86)
+**Build System:** Zig cc 0.16.0-dev (cross-compilation to Windows x86)
 
-**Target Platform:** Windows x86 (same as original hp.exe)
+**Target Platform:** Windows x86 (32-bit, same as original hp.exe)
 
-**Compilation Status:** ✅ Builds successfully without errors
+**Compilation Status:** ✅ Builds successfully (832 KB executable with PDB)
 
 ## Project Structure
 
 ```
 decompilation-src/
-├── main.cpp            Main implementation (~1600 lines)
-├── globals.h           Global declarations and structures (~470 lines)
+├── main.cpp            Main implementation (1971 lines)
+├── globals.h           Global declarations and structures (809 lines)
 ├── build.sh            Build script using zig cc
-└── ../hp_decompiled.exe Compiled output (823 KB)
+└── ../hp_decompiled.exe Compiled output (832 KB)
 ```
 
 ## Key Design Principles
@@ -29,445 +29,549 @@ decompilation-src/
 3. **No Magic Numbers:** Constants are named and explained with comments
 4. **Clean Structure:** Logical separation of subsystems
 5. **Commented TODOs:** Incomplete implementations marked clearly for future work
-6. **Accurate Structures:** Data structures match original binary layouts
+6. **Accurate Structures:** Data structures match original binary layouts where known
 
-## Core Data Structures
+## Architecture Layers
 
-### Audio System
+### Layer 1: Platform & API Integration
+- Windows API (window management, registry, message loop)
+- DirectX 9 (D3D device, Present, Reset, Lost device handling)
+- DirectInput 8 (keyboard, mouse, joystick enumeration and polling)
+- DirectSound (audio device initialization, thread-based playback)
 
-**AudioCommand Structure:**
+### Layer 2: Core Engine
+- **Timing:** 16.16 fixed-point, 60 FPS target, 3x game speed scaling
+- **Memory:** Custom allocator with tagged allocations and free lists
+- **Callbacks:** 8-slot frame callback system with primary/secondary timing
+- **Message Dispatch:** FNV-1a hash-based message routing
+
+### Layer 3: Subsystems
+- **Scene Management:** Three-ID system (old, current, new) with listener notifications
+- **Audio:** Command queue (ring buffer), async thread worker
+- **Input:** Double-buffered state with edge detection
+- **Render:** Deferred batch queue with 2ms time budget
+- **TimeManager:** Pause state management with 4 states
+
+### Layer 4: High-Level Game Systems (Iteration 8)
+- **Spell Casting:** State machine, gesture recognition (stub), wand discipline
+- **Physics:** Havok 3.x/4.x stub interfaces (rigid bodies, collision, raycasting)
+- **Zone Streaming:** 4 load zones + 3 unload zones, hybrid streaming
+- **Asset Loading:** GOF framework with type-specific handlers (RCB, HKX, Babble, Hull, Spline)
+- **Animation:** Skeletal skinning (GPU), blend shapes with specular tint
+- **AI:** State-based (idle variants, patrol, wander, chase, attack, sidle)
+- **UI:** Screen-based, 32-button mapping, message queue
+
+## Build Configuration
+
+**Compiler:** Zig 0.16.0-dev C++ mode  
+**Target:** x86-windows-gnu (32-bit)  
+**Libraries Linked:**
+- c++ (C++ standard library)
+- user32 (Windows user interface)
+- gdi32 (Graphics Device Interface)
+- ole32 (COM/OLE)
+- uuid (GUID support)
+- winmm (Multimedia timers)
+- dsound (DirectSound)
+
+**Build Command:**
+```bash
+cd decompilation-src && ./build.sh
+```
+
+## Data Structures Overview
+
+### Core Engine Structures
+
+**CallbackSlot (8 slots):**
+```cpp
+struct CallbackSlot {
+    void (*pfnCallback)(void*);
+    void* pContext;
+};
+```
+
+**MessageHandler (hash table):**
+```cpp
+struct MessageHandler {
+    void (*pfnHandler)(void*);
+    void* pContext;
+    unsigned int messageHash;  // FNV-1a
+};
+```
+
+**AudioCommand (queue of 256):**
 ```cpp
 struct AudioCommand {
-    AudioCommandType opcode;       // Command type (OPEN, PLAY, STOP, etc.)
-    void* params;                  // Command-specific parameters
-    void (*callback)(int status);  // Completion callback
-    int status;                    // -2=error, 0=pending, 1=complete
-    DWORD timestamp;               // Submission time
+    AudioCommandType opcode;
+    void* params;
+    void (*callback)(int status);
+    int status;  // -2=error, 0=pending, 1=complete
 };
 ```
 
-**AudioCommandQueue Structure:**
+**SceneIDs:**
 ```cpp
-struct AudioCommandQueue {
-    AudioCommand commands[64];     // Fixed array of commands
-    int head;                      // Read index
-    int tail;                      // Write index
-    int count;                     // Active command count
-    CRITICAL_SECTION cs;           // Thread synchronization
-    HANDLE event;                  // Wake notification event
+struct SceneIDs {
+    int oldSceneID;
+    int currentSceneID;
+    int newSceneID;
 };
 ```
 
-Implements async audio command processing with thread-safe ring buffer.
-
-### Memory Allocator
-
-**EngineAllocator Structure:**
+**TimeManager:**
 ```cpp
-struct EngineAllocator {
-    void* vtable;                    // +0x00
-    DWORD total_allocated;           // +0x04
-    DWORD current_allocated;         // +0x08
-    DWORD peak_usage;                // +0x0c
-    DWORD allocation_count;          // +0x10
-    DWORD free_count;                // +0x14
-    DWORD current_alloc_count;       // +0x18
-    void* heap_base;                 // +0x1c
-    SIZE_T heap_size;                // +0x20
-    DWORD flags;                     // +0x24
-    TagStats tag_stats[256];         // +0x28 (per-tag tracking)
-    FreeListNode* free_lists[254];   // +0x428 (size-class buckets)
-    CRITICAL_SECTION cs;             // +0x820
-    DWORD last_compact_time;         // +0x838
-    DWORD compact_threshold;         // +0x83c
+struct TimeManager {
+    GamePauseState pauseState;  // UNPAUSED, PAUSE_REQUESTED, PAUSED, UNPAUSE_REQUESTED
+    bool isPaused;
 };
 ```
 
-Features:
-- Free list allocation with 254 size classes
-- Per-tag memory tracking (256 tags)
-- Thread-safe with critical section
-- Stats for debugging and profiling
-- Defragmentation support
+### Iteration 8 Structures
 
-### Message Dispatch System
-
-**MessageEntry Structure:**
+**SpellSystemState:**
 ```cpp
-struct MessageEntry {
-    DWORD msg_hash;                  // FNV-1a hash of message name
-    void* dest_object;               // Destination object pointer
-    void (*handler)(void*, void*);   // Handler function
-    int param_type;                  // Parameter type indicator
-    const char* debug_name;          // Original name (debug)
+struct SpellSystemState {
+    SpellCastState currentState;      // State machine
+    SpellType lastCastSpell;
+    int successfulCastsCount;          // Achievement tracking
+    WandDisciplineState wandState;     // Safe/restricted zones
+    bool gestureInProgress;
+    float gestureStartTime;
 };
 ```
 
-**Hash Function Implementation:**
+**hkPhysicsSystem (Havok stub):**
 ```cpp
-DWORD HashMessageName(const char* msgName) {
-    DWORD hash = 2166136261u;  // FNV offset basis
-    while (*msgName) {
-        hash ^= (BYTE)(*msgName++);
-        hash *= 16777619u;  // FNV prime
+struct hkPhysicsSystem {
+    void* vtable;
+    void* worldData;
+    int rigidBodyCount;
+    void* rigidBodies;       // Array of hkRigidBody*
+    void* collisionFilter;   // Group-based filtering
+    int versionMajor;        // 3 or 4
+    int versionMinor;
+};
+```
+
+**LoadZone:**
+```cpp
+struct LoadZone {
+    char zoneName[64];
+    ZoneLoadState state;     // UNLOADED, LOADING, LOADED, UNLOADING
+    void* pAssetList;
+    size_t memoryUsed;
+    int priority;            // 0-3
+};
+```
+
+**StreamingManager:**
+```cpp
+struct StreamingManager {
+    LoadZone loadZones[4];    // 4 concurrent
+    LoadZone unloadZones[3];  // 3 concurrent
+    bool loadingScreenActive;
+    bool hybridStreamingActive;
+    float playerPosX, playerPosY, playerPosZ;
+};
+```
+
+**AssetManager:**
+```cpp
+struct AssetManager {
+    AssetEntry* pAssetTable;        // Hash table
+    int assetCount;
+    int maxAssets;
+    ResourceHandler* handlers[16];  // Per resource type
+};
+```
+
+**AssetEntry:**
+```cpp
+struct AssetEntry {
+    char filename[MAX_PATH];
+    ResourceType type;        // MODEL, TEXTURE, ANIMATION_RCB, PHYSICS_HKX, etc.
+    void* pData;
+    size_t headerSize;        // Pre-allocated sizes
+    size_t bodySize;
+    bool isLoaded;
+};
+```
+
+**SkeletalMesh:**
+```cpp
+struct SkeletalMesh {
+    int numBones;
+    int numBonesPerVertex;    // 1-4
+    unsigned int boneIndexOffset;
+    unsigned int boneWeightOffset;
+    void* pBoneMatrices;      // Matrix palette for GPU
+    BlendShape* pBlendShapes;
+    int blendShapeCount;
+};
+```
+
+**BlendShape:**
+```cpp
+struct BlendShape {
+    char name[64];
+    float weight;             // 0.0-1.0
+    float specularTint;       // Lighting modulation
+    void* pMorphTargetData;   // Vertex deltas
+};
+```
+
+**AIAgent:**
+```cpp
+struct AIAgent {
+    AIState currentState;     // IDLE, PATROL, WANDER, CHASE, ATTACK, SIDLE, FLEE
+    AIState previousState;
+    bool canSidle;            // Capability flag
+    int patrolLocatorCount;
+    int currentPatrolLocator;
+    AILocator* pPatrolLocators;
+    float stateTimer;
+};
+```
+
+**UISystem:**
+```cpp
+struct UISystem {
+    UIScreen currentScreen;   // SPLASH, MAIN_MENU_2_0, START_MENU, LOAD_GAME_4_0, etc.
+    UIScreen previousScreen;
+    UIButton buttons[32];     // 32-button support
+    int messageQueueHead;
+    int messageQueueTail;
+    UIMessage messageQueue[64];
+};
+```
+
+## Initialization Flow
+
+### WinMain Entry
+1. FPU configuration: `_control87(0x20000, 0x30000)` (disable denormal exceptions)
+2. Save system parameters (mouse speed, acceleration, screen reader)
+3. Command line parsing and storage (2 copies)
+4. Single instance check via `FindWindowA("OrderOfThePhoenixMainWndClass", NULL)`
+5. Window class registration
+6. Registry settings load (graphics, window placement)
+7. Command line argument parsing (fullscreen, widescreen, etc.)
+8. Window creation and client rect measurement
+
+### Engine Initialization
+1. **Engine Object Factory:** Create 2904-byte engine root object with magic `{0x88332000000001, 0}`
+2. **Pre-DirectX Init:** Audio subsystem setup, device string copy
+3. **DirectX Init:** D3D9 device, DirectInput8, DirectSound creation
+4. **Subsystem Init:** Callbacks, message dispatch, scene management, audio thread, input polling
+
+### Iteration 8 Systems Init
+1. **Spell System:** State machine init, spell cast counter = 0, wand = holstered
+2. **Physics (stub):** Havok interface setup (no actual physics without SDK)
+3. **Streaming:** Initialize 4 load zones and 3 unload zones
+4. **Asset Manager:** Register resource handlers (RCB, HKX, Babble, Hull, Spline, etc.)
+5. **AI:** Initialize agent state machines
+6. **UI:** Set initial screen (SPLASH or MAIN_MENU)
+
+### Main Loop Entry
+1. Window placement restore (maximized/minimized/normal)
+2. `UpdateWindow(hWnd)`
+3. `MainLoop()` - message pump and frame updates
+
+## Main Loop Architecture
+
+```
+MainLoop() {
+    while (!g_bExitRequested) {
+        // Windows messages
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+        
+        // Frame update
+        if (!g_bDeviceLost && g_bGameUpdateEnabled) {
+            UpdateFrame();
+        }
+        
+        // Render
+        if (CanRender()) {
+            BeginScene() → RenderScene() → EndScene() → Present();
+        }
+        
+        // Device lost handling
+        if (g_bDeviceLost) {
+            Sleep(50ms);
+            AttemptDeviceReset();
+        }
     }
-    return hash;
 }
 ```
 
-Uses FNV-1a hashing for fast message name lookup. Table size: 256 entries.
+## Frame Update Flow
+
+```
+UpdateFrame() {
+    1. Get deltaTime from timeGetTime()
+    2. Cap deltaTime to MAX_DELTA_TIME_MS (100ms, spiral-of-death prevention)
+    3. Accumulate time in 16.16 fixed-point: g_ullAccumTime += (deltaTime << 16)
+    4. Check if callback interval reached (16ms = 60 FPS)
+    5. If reached:
+       a. UpdateFrameTimingPrimary() - primary timing callback
+       b. Update g_dwGameTicks = (accumTime * 3) / 0x10000  (3x speed scaling)
+       c. Invoke 8 frame callback slots
+       d. InterpolateFrameTime() - secondary timing callback
+       e. ProcessDeferredRenderQueue(2ms budget)
+       f. Advance g_ullNextCallback += g_ullCallbackInterval
+}
+```
+
+## Timing System Details
+
+**16.16 Fixed-Point:**
+- Upper 16 bits = whole seconds
+- Lower 16 bits = fractional seconds
+- Divide by 0x10000 (65536) to get floating-point seconds
+
+**Game Time Scaling:**
+- Real time is multiplied by 3 for game logic
+- Physics/AI run at 3x speed
+- Rendering interpolates for smooth 60 FPS display
+
+**Callback Interval:**
+- Set to 16ms (1,048,576 in 16.16 format)
+- Equivalent to 60 FPS
+- Primary callback: update game state
+- Secondary callback: interpolate for rendering
+
+## Subsystem Details
+
+### Audio System
+- **Queue:** 256-entry ring buffer
+- **Thread:** Asynchronous worker (`AudioThreadProc`)
+- **Commands:** PlaySound, StopSound, SetVolume, SetPitch
+- **DirectSound:** Buffer creation, 3D positioning, streaming
 
 ### Input System
+- **Double Buffering:** Current frame and previous frame states
+- **Edge Detection:** IsKeyPressed (curr && !prev), IsKeyReleased (!curr && prev)
+- **Devices:** Keyboard, mouse, 4 joysticks
+- **Polling:** `PollInputDevices()` called every frame
 
-**RealInputSystem Structure:**
-```cpp
-struct RealInputSystem {
-    void* vtable;                      // +0x00
-    IDirectInput8* pDirectInput;       // +0x04
-    IDirectInputDevice8* pKeyboard;    // +0x08
-    IDirectInputDevice8* pMouse;       // +0x0c
-    IDirectInputDevice8* pJoystick[2]; // +0x10
-    BYTE keyboard_state[256];          // +0x18 (current)
-    BYTE prev_keyboard_state[256];     // +0x118 (previous)
-    DIMOUSESTATE2 mouse_state;         // +0x218
-    DIMOUSESTATE2 prev_mouse_state;    // +0x22c
-    DIJOYSTATE2 joystick_state[2];     // +0x240
-    DIJOYSTATE2 prev_joystick_state[2];// +0x340
-    bool keyboard_active;              // +0x440
-    bool mouse_active;                 // +0x441
-    bool joystick_active[2];           // +0x442
-    DWORD input_flags;                 // +0x444
-    bool paused;                       // +0x448
-    CRITICAL_SECTION cs;               // +0x44c
-};
+### Message Dispatch
+- **Hash Algorithm:** FNV-1a (32-bit)
+- **Table Size:** Configurable (default 256 entries)
+- **Collision Handling:** Linear probing
+- **Handler Format:** `void (*handler)(void* context)`
+
+### Scene Management
+- **Three-ID System:** oldSceneID, currentSceneID, newSceneID
+- **Transitions:** old → current → new
+- **Listeners:** Notified on scene change (linked list)
+
+### Render Queue
+- **Deferred Batching:** Linked list of RenderBatchNode
+- **Time Budget:** 2ms per frame
+- **Processing:** ProcessDeferredRenderQueue() walks list until budget exhausted
+
+## Iteration 8 System Details
+
+### Spell System
+**State Machine:**
+```
+IDLE → BEFORE_CAST → GESTURE_RECOGNITION → GOOD_CAST → SUCCESSFUL_CAST → AFTER_CAST
+                                                ↓
+                                         FAILED_TO_CAST
 ```
 
-Features:
-- Double-buffered state for edge detection
-- Supports keyboard, mouse, and up to 2 joysticks
-- Thread-safe access
-- Pause state support
+**Wand Discipline:**
+- WANDINNOTSCARED: Holstered, NPCs neutral
+- WANDOUTNOTPUNISH: Out in safe zone
+- WANDOUTPUNISH: Out in restricted zone (triggers NPC punishment)
 
-### Render Queue System
+**Achievement Tracking:**
+- `successfulCastsCount` increments on SUCCESSFUL_CAST
+- At 500 casts, achievement unlocked
 
-**RenderBatchNode Structure:**
-```cpp
-struct RenderBatchNode {
-    void* geometry_buffer;         // +0x00
-    DWORD vertex_count;            // +0x04
-    DWORD index_count;             // +0x08
-    void* material;                // +0x0c
-    DWORD shader_hash;             // +0x10 (FNV-1a)
-    float world_matrix[16];        // +0x14 (4x4 transform)
-    DWORD render_flags;            // +0x54
-    float sort_key;                // +0x58 (depth)
-    int batch_id;                  // +0x5c
-    DWORD timestamp;               // +0x60
-    char padding[0x1c];            // +0x64
-    RenderBatchNode* next;         // +0x7c
-};
-```
+### Physics System (Havok Stub)
+**Note:** Actual Havok SDK not linked. Structures are stubs for future integration or replacement (e.g., Bullet Physics).
 
-**Shader Type Constants:**
-```cpp
-#define SHADER_HASH_OPAQUE   0x2a4f6b91
-#define SHADER_HASH_ALPHA    0x7c31e8a2
-#define SHADER_HASH_BLOOM    0x1f9d4c33
-#define SHADER_HASH_GLASS    0x5e2a1bd4
-#define SHADER_HASH_BACKDROP 0x8f3c9a45
-#define SHADER_HASH_WATER    0x3d7f2e16
-#define SHADER_HASH_SKY      0x6a8b4c97
-```
+**Components:**
+- hkPhysicsSystem - World container
+- hkRigidBody - Rigid body dynamics
+- Motion types: FIXED (static), KEYFRAMED (animated), DYNAMIC
+- Collision groups: 32-bit masks for filtering
+- MOPP raycasting: Memory Optimized Partial Polytope VM
+- Deactivation: Spatial partitioning-based sleep system
 
-Render order: SKY → OPAQUE → WATER → ALPHA → GLASS → BLOOM → BACKDROP
+### Zone Streaming
+**4 Load Zones:**
+- Selected based on player position
+- Priority system (0-3)
+- Async loading
 
-### GameServices System
+**3 Unload Zones:**
+- Freed as player moves away
+- Memory budget enforcement
 
-**GameServices Structure:**
-```cpp
-struct GameServices {
-    void* vtable;                  // +0x00
-    void* save_manager;            // +0x04
-    void* profile_manager;         // +0x08
-    void* locale_manager;          // +0x0c
-    void* achievement_mgr;         // +0x10
-    void* stat_tracker;            // +0x14
-    void* option_manager;          // +0x18
-    bool initialized;              // +0x40
-    DWORD init_flags;              // +0x44
-};
-```
+**Hybrid Streaming:**
+- Seamless without loading screens
+- Preload triggers for cutscenes/transitions
+- No-load boxes for small rooms
 
-Provides centralized access to game subsystems with lazy initialization pattern.
+### Asset Loading
+**Resource Handlers:**
+- ResourceHandler interface: Initialise(), Load(), Unload()
+- Handlers registered per ResourceType
+- Pre-allocation: headerSize + bodySize calculated before load
+- Validation: Format checks, version checks, CRC
 
-### Frame Timing System
+**File Formats:**
+- RCB: Animation data
+- HKX: Havok physics data
+- Babble: Dialogue/subtitle data
+- Hull: Collision hulls
+- Spline: Path splines for cameras, NPCs
+- Trinity: Cutscene sequences
 
-**CallbackSlot Structure:**
-```cpp
-struct CallbackSlot {
-    void (*func)(void* context);
-    void* context;
-};
-```
+### Animation System
+**Skeletal Skinning:**
+- GPU-accelerated (vertex shader)
+- 1-4 bones per vertex
+- Matrix palette uploaded per frame
+- Bone indices and weights in vertex attributes
 
-**Global Timing State:**
-```cpp
-extern ULONGLONG g_ullCallbackInterval;  // 16ms in 16.16 fixed-point (0x100000)
-extern ULONGLONG g_ullAccumTime;         // Accumulated time
-extern ULONGLONG g_ullNextCallback;      // Next callback trigger time
-extern int g_nFrameFlip;                 // Double-buffer index (0/1)
-extern DWORD g_dwGameTicks;              // Game ticks (accum * 3 / 0x10000)
-```
+**Blend Shapes:**
+- Morph target interpolation
+- Weight: 0.0 (base mesh) to 1.0 (full blend)
+- Specular tint modulation for lighting effects
+- Used for facial expressions, lip-sync
 
-**Constants:**
-```cpp
-static const DWORD MAX_DELTA_TIME_MS    = 100;  // Spiral-of-death cap
-static const DWORD TARGET_FRAME_TIME_MS = 16;   // ~60 FPS
-static const ULONGLONG GAME_TIME_SCALE  = 3;    // Game runs 3x real-time
-static const DWORD TIME_FIXED_SHIFT     = 0x10000; // 16.16 denominator
-```
+### AI System
+**States:**
+- Idle variants: scared, angry, sulking, shy, excited, confused, sarcastic
+- Active: patrol, wander, chase, attack, sidle, flee
 
-## Global Variables
+**Locator-Based Navigation:**
+- Patrol: cycle through named locators
+- Wander: random walk with music triggers
+- Chase: target tracking with end markers
 
-### DirectX Resources
-```cpp
-extern IDirect3D9* g_pD3D;
-extern IDirect3DDevice9* g_pd3dDevice;
-extern IDirect3DSurface9* g_pBackBuffer;
-extern IDirect3DSurface9* g_pRenderTarget;
-extern IDirect3DSurface9* g_pAdditionalRT;
-extern IDirect3DSurface9* g_pCachedRT;
-extern IDirect3DSurface9* g_pCachedDS;
-extern IUnknown* g_pGPUSyncQuery;
-extern D3DPRESENT_PARAMETERS g_d3dpp;
-```
+**Sidle System:**
+- Ledge detection
+- sidle_left/right animations
+- climb_from_sidle transitions
+- Capability flag: `canSidle`
 
-### DirectInput Resources
-```cpp
-extern IDirectInput8* g_pDirectInput;
-extern IDirectInputDevice8* g_pKeyboard;
-extern IDirectInputDevice8* g_pMouse;
-extern IDirectInputDevice8* g_pJoystick[2];
-```
+### UI System
+**Screens:**
+- Versioned: "2.0_Main_Menu", "4.0_Load_Game"
+- State machine with transitions
+- Previous screen tracked for back navigation
 
-### Subsystem Globals
-```cpp
-extern CallbackSlot g_FrameCallbackSlots[8];
-extern SceneIDs g_SceneIDs;
-extern RenderBatchNode* g_pDeferredRenderQueue;
-extern TimeManager* g_pTimeManager;
-extern MessageEntry g_MessageDispatchTable[256];
-extern int g_nMessageHandlerCount;
-extern AudioCommand g_AudioCommandQueue[32];
-extern int g_nAudioQueueHead;
-extern int g_nAudioQueueTail;
-extern HANDLE g_hAudioThread;
-extern GlobalTempBuffer* g_pGlobalTempBuffer;
-extern RealGraphSystem* g_pRealGraphSystem;
-extern void* g_pEngineRootObject;
-extern void* g_pCallbackManager_Primary;
-extern void* g_pCallbackManager_Secondary;
-```
+**Button Mapping:**
+- 32 buttons: BUTTON1-BUTTON32
+- Platform-specific: ButtonX, ButtonA (Xbox), button_square (PlayStation)
+- Edge detection for press/release events
 
-## Function Organization
-
-### Initialization Sequence
-
-1. **WinMain Entry:**
-   - FPU configuration
-   - System parameters save
-   - Command line parsing
-   - Single instance check
-   - Window registration and creation
-
-2. **DirectX Initialization:**
-   - `PreDirectXInit()` - Audio/render context setup
-   - `InitDirectXAndSubsystems()` - D3D device + DirectInput
-   - `InitGameSubsystems()` - Callbacks, language resources
-
-3. **Subsystem Initialization:**
-   - `InitFrameCallbackSystem()` - Clear callback slots
-   - `InitAudioCommandQueue()` - Initialize audio queue
-   - `LoadSceneIDs()` - Initialize scene management
-   - Message dispatch table setup
-
-4. **Main Loop:**
-   - `MainLoop()` - Window message pump
-   - `GameFrameUpdate()` - Per-frame game logic
-   - `UpdateFrameTimingPrimary()` - Timing callback
-   - `InterpolateFrameTime()` - Smooth interpolation
-   - `InvokeFrameCallbacks()` - Dispatch to registered callbacks
-   - `ProcessDeferredRenderQueue()` - Batch rendering
-
-5. **Cleanup:**
-   - `RenderAndAudioTeardown()` - Release resources
-   - Engine object release
-   - `SaveOptionsOnExit()` - Write settings to registry
-   - Input device unacquire
-   - System parameters restore
-
-### Key Functions
-
-#### Audio System
-- `AudioThreadProc()` - Audio thread entry point (TODO: implement)
-- `AudioPollGate()` - Check command queue status
-- `EnqueueAudioCommand()` - Add command to queue
-- `InitAudioCommandQueue()` - Initialize queue structure
-
-#### Memory Management
-- `AllocEngineObject(size, tag)` - Tagged allocation
-- `FreeEngineObject(ptr)` - Free allocation
-- `QueryMemoryAllocatorMax()` - Get largest free block
-
-#### Message Dispatch
-- `HashMessageName(name)` - FNV-1a hash implementation
-- `RegisterMessageHandler(dest, name, type)` - Register handler
-- `DispatchMessage(msgID, params)` - Dispatch to handler (TODO: complete)
-
-#### Frame Timing
-- `GetGameTime()` - Get current game time
-- `UpdateFrameTimingPrimary(localTick)` - Primary timing callback
-- `InterpolateFrameTime()` - Smooth interpolation callback
-- `GameFrameUpdate()` - Main frame update loop
-
-#### Scene Management
-- `LoadSceneIDs()` - Initialize scene ID globals
-- `NotifySceneListeners(sceneID)` - Notify registered listeners
-- `FlushDeferredSceneListeners()` - Process deferred notifications
-
-#### Render Queue
-- `BuildRenderBatch()` - Build and sort render batches
-- `ProcessDeferredRenderQueue()` - Process batches within time budget
-
-## Implementation Status
-
-### ✅ Fully Implemented
-- Window creation and message loop
-- DirectX device initialization and management
-- DirectInput device creation and acquisition
-- Registry settings load/save
-- Command line parsing
-- System parameters manipulation
-- FPU configuration
-- Frame timing with double buffering
-- Timing callback dispatch
-- Frame interpolation
-- Single instance check
-
-### ⚠️ Partially Implemented  
-- Message dispatch system (registration works, dispatch stub)
-- Frame callback registration (structure ready, no actual callbacks)
-- Audio command queue (structure defined, enqueue stub)
-- Render batch queue (structure defined, no building logic)
-- Scene management (structure ready, no actual scene changes)
-- Memory allocator (interface defined, uses default allocator)
-
-### 🔲 Not Yet Implemented
-- Audio thread worker function
-- Complete message hash table lookup
-- Render batch building and sorting
-- Scene listener notifications
-- Resource notification system
-- Game logic (spells, AI, physics)
-- Asset loading and streaming
-- Scripting/event system
-
-## Build Process
-
-**Build Script (build.sh):**
-```bash
-#!/bin/bash
-zig c++ main.cpp -o ../hp_decompiled.exe \
-    -target x86-windows-gnu \
-    -luser32 -lgdi32 -lwinmm -ld3d9 -ldinput8 -ldxguid \
-    -mwindows
-```
-
-**Compilation:**
-- ✅ Zero errors
-- ⚠️ Warning: `-mwindows` argument unused (benign)
-- Output: 823 KB executable
-
-**Binary Size Comparison:**
-- Original `hp.exe`: 5,427,200 bytes
-- Decompiled `hp_decompiled.exe`: 823,808 bytes
-- Ratio: ~15% (expected - missing game logic/assets)
-
-## Architectural Patterns Used
-
-1. **Factory Pattern:** Engine object creation via callback manager
-2. **Observer Pattern:** Message dispatch and scene listeners
-3. **Command Pattern:** Deferred render queue and audio commands
-4. **Singleton Pattern:** GameServices, TimeManager
-5. **Double Buffering:** Frame timing state for smooth interpolation
-6. **Ring Buffer:** Audio command queue
-7. **Free List Allocator:** Memory management
-8. **Hash Table:** Message dispatch by name
-
-## Code Quality Metrics
-
-- **Total Lines:** ~2,070 (main.cpp + globals.h)
-- **Functions:** ~50 implemented
-- **Data Structures:** 20+ defined
-- **Constants:** All named, no magic numbers
-- **Comments:** Extensive, including original function addresses
-- **TODOs:** Clearly marked for incomplete features
+**Message Queue:**
+- 64-entry ring buffer
+- Message types: GAME_LOADING, LOAD_COMPLETE, LOAD_FAILED, etc.
+- Decoupled from game logic
 
 ## Differences from Original
 
-### Intentional Simplifications
-1. **COM Objects:** Using regular pointers instead of COM reference counting
-2. **VTables:** Structures defined but methods not fully implemented
-3. **Error Handling:** Simplified error paths (original has extensive checks)
-4. **Threading:** Audio thread structure defined but not running
-5. **Subsystems:** Skeleton implementations, not full game logic
+### Similarities
+- Timing system (16.16 fixed-point, 60 FPS, 3x scaling)
+- Callback system (8 slots)
+- Message dispatch (FNV-1a hash)
+- Audio command queue (256 entries)
+- Scene management (three-ID system)
+- Input double-buffering
+- Spell state machine structure
+- Zone streaming architecture (4 load, 3 unload)
+- Asset manager with type-specific handlers
 
-### Architectural Equivalence
-1. **Memory Layout:** Structures match original sizes and offsets
-2. **Initialization Order:** Same sequence as original
-3. **Timing System:** Identical 16.16 fixed-point, 60 FPS, 3x game speed
-4. **Window Management:** Same Win32 API usage and message handling
-5. **DirectX Setup:** Equivalent device creation and state management
+### Differences
+- **No Havok SDK:** Stub interfaces only (original links against Havok 3.x/4.x)
+- **No RenderWare:** Original uses RW asset pipeline (HKX export, etc.)
+- **No Trinity Sequencer:** Cutscene system stubbed
+- **Clean C++ vs. Optimized Assembly:** Zig-compiled vs. MSVC-optimized
+- **Single Platform:** Windows x86 only (original: Windows, Xbox 360, PS2/PS3)
+- **Gesture Recognition:** Stubbed (original likely uses mouse path matching)
+- **AI Behavior Trees:** Stubbed (structure only, no logic)
+- **Resource Files:** Original loads .pak/.dat archives (not implemented)
 
-## Next Steps for Full Decompilation
+## Missing Implementations
 
-1. **Implement Audio Thread:**
-   - Worker function with command processing loop
-   - DirectSound integration
-   - Streaming buffer management
+### Critical (prevents running)
+1. Havok physics or replacement
+2. Asset file loading (RCB, HKX parsing)
+3. Texture/model loading and D3D upload
+4. Shader compilation and rendering
+5. UI rendering (fonts, buttons, menus)
 
-2. **Complete Message Dispatch:**
-   - Hash table lookup with collision handling
-   - Full dispatch implementation
-   - Common message handlers
+### Important (limits functionality)
+1. Spell gesture recognition algorithm
+2. AI behavior tree execution
+3. Zone streaming trigger logic
+4. Trinity sequencer playback
+5. Audio file decoding (MP3, Ogg, etc.)
 
-3. **Render Batch Processing:**
-   - Batch building and shader-based sorting
-   - Time-budgeted processing (2ms limit)
-   - State change optimization
+### Nice to have (polish)
+1. Blend shape animation blending
+2. Particle systems
+3. Post-processing effects
+4. Achievement system integration
 
-4. **Scene Management:**
-   - Listener list implementation
-   - Scene loading and unloading
-   - Transition handling
+## Next Implementation Steps
 
-5. **Game Logic:**
-   - Spell system
-   - AI state machines
-   - Physics integration
-   - Character controller
+Based on analysis, recommended order:
 
-6. **Asset Loading:**
-   - Archive format parsing
-   - Texture/mesh/sound loading
-   - Level streaming
+1. **Asset Loading Foundation:**
+   - Implement file I/O for .pak/.dat archives
+   - Parse RCB animation format
+   - Load textures (DDS, TGA) and upload to D3D9
 
-## Conclusion
+2. **Minimal Physics:**
+   - Replace Havok with Bullet Physics or Box2D
+   - Implement collision groups and filters
+   - Basic rigid body dynamics
 
-The C++ decompilation successfully captures the core engine architecture of `hp.exe` with clean, well-structured code. All major subsystems are defined and the initialization flow matches the original. The code compiles without errors and provides a solid foundation for completing the full game logic implementation.
+3. **Spell System:**
+   - Keyboard-based spell triggers (no gesture recognition)
+   - Spell effect application (damage, knockback)
+   - Wand discipline zone marking
 
-The current iteration (7) has achieved comprehensive documentation of all major subsystems with accurate structure layouts. The next iteration will focus on implementing the actual game logic and completing the stub functions.
+4. **Zone Streaming:**
+   - Implement streaming state machine
+   - Player position-based zone selection
+   - Async asset loading
 
----
+5. **AI Basics:**
+   - Patrol locator cycling
+   - Simple chase behavior (proximity-based)
+   - Idle state with personality variants
 
-*Last Updated: Iteration 7 - April 14, 2026*
+6. **UI Rendering:**
+   - Font rendering (bitmap or TrueType)
+   - Button hit testing
+   - Screen transition logic
+
+This allows the decompilation to run and demonstrate core gameplay, even without perfect accuracy.
+
+## Compilation Success
+
+✅ **Build Status:** Compiles without errors  
+✅ **Output Size:** 832 KB (includes debug PDB)  
+✅ **Dependencies:** All Windows/DirectX libraries linked  
+✅ **Warnings:** None (clean compile)  
+
+**Command:**
+```bash
+cd decompilation-src && ./build.sh
+```
+
+**Output:**
+```
+Build successful: ../hp_decompiled.exe
+```

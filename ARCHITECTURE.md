@@ -2525,3 +2525,537 @@ From ParseCommandLineArg (00617bf0) and CLI_CommandParser_ParseArgs (00eb787a):
 7. Resource notification system
 
 The architecture is now substantially complete with all major subsystems understood and documented.
+
+---
+
+## Iteration 8: High-Level Game Systems
+
+### Third-Party Middleware
+
+**Havok Physics Engine (v3.x-4.x):**
+- Version strings detected: `Havok-3.0.0`, `Havok-3.1.0`, `Havok-4.0.0-b1`, `Havok-4.0.0-r1`
+- Mixed versions suggest mid-development upgrade from Havok 3.x to 4.0
+- License check validates evaluation key (disabled in release build)
+- RenderWare integration via `rwID_HAVOK_HKX_DATA` plugin
+
+**RenderWare Graphics:**
+- Asset pipeline integration for models, animations, and physics data
+- HKX export format for Havok physics data
+- Hybrid reference counting system (`Havok::HybridRef`)
+
+**Trinity Sequencer:**
+- EA's scripted sequence system for cutscenes
+- Binary resource format with validation: `TrinitySequencer::parseResource`
+- Error handling for invalid sequence data
+
+### Spell Casting System
+
+**State Machine:**
+```
+BEFORE_CAST → [gesture recognition] → GOOD_CAST → SUCCESSFUL_CAST → AFTER_CAST
+                                    ↓
+                                 FAILED_TO_CAST
+                                    ↓
+                                 INVALID_SPELL
+```
+
+**Integration Points:**
+1. **Animation System:**
+   - `wand_blendShape.bs_wand_hold` - Wand holstered blend shape
+   - `wand_blendShape.bs_wand_cast` - Wand casting blend shape
+   - `hand_rt_blendShape.bs_cast_rt` - Right hand casting deformation
+   - `anim:spell_cast` - Spell casting animation trigger
+   - `DRAWS_WAND` - Wand draw animation event
+
+2. **Audio System:**
+   - `AudioWingardiumCast`, `AudioCarpeCast` - Spell-specific audio cues
+   - `OnJinxCast`, `SetupJinxCast` - Jinx audio setup
+   - `COMBAT_SPELL_CASTED_01` through `COMBAT_SPELL_CASTED_07` - Combat spell audio events
+
+3. **Achievement/Statistics:**
+   - `SUCCESSFUL_SPELLS_CAST_500` - Spell counter for achievements
+   - `REWARD_DESC_CAST_500_SPELLS` - Achievement description
+   - Tracks successful casts globally
+
+4. **Context System:**
+   - `WANDOUTNOTPUNISH` - Safe zone (wand allowed)
+   - `WANDOUTPUNISH` - Restricted zone (triggers NPC punishment behavior)
+   - `WANDINNOTSCARED` - Holstered wand (NPCs neutral)
+   - `INVCASTREACTION` - Invalid cast reaction (wrong gesture, wrong spell)
+
+**Spell Data:**
+- `10.4_SpellList` - Data file containing spell definitions
+- `SPELL_FINITE` - Spell termination spell (ends active spells)
+- `INVALID_SPELL` - Error state for unrecognized gestures
+
+**Spell Cast Tracking:**
+- Event-driven with state notifications to listeners
+- Integrated with combat system (7+ combat spell variants)
+- Patronus special case: `patronus_cast_into` (cutscene trigger)
+
+### Physics System (Havok)
+
+**Core Components:**
+
+1. **Physics World:**
+   - `hkPhysicsSystem` - Top-level world container
+   - `hkPhysicsData` - Serialized physics scene data
+   - `physicsSystemBindings` - Binding layer to game objects
+   - `Continuous Physics` - CCD (Continuous Collision Detection) enabled
+
+2. **Rigid Body System:**
+   ```cpp
+   struct hkRigidBody {
+       hkMotionState motion;           // Position, rotation, velocity
+       hkShape* collisionShape;        // Collision geometry
+       hkRigidBodyDeactivator* deactivator;  // Sleep system
+       // ... additional fields
+   };
+   ```
+   
+   **Motion Types:**
+   - `hkKeyframedRigidMotion` - Animated/scripted objects (moving platforms, elevators)
+   - `hkFixedRigidMotion` - Static geometry (walls, floors)
+   - Dynamic motion - Player, NPCs, physics objects
+   
+   **Bindings:**
+   - `rigidBodyBindings` - Map of rigid body → game object
+   - `rigidBodyFromDisplayObjectTransform` - Transform synchronization
+   - Bidirectional sync: physics affects rendering, animations affect physics
+
+3. **Collision System:**
+   
+   **Filters (layered):**
+   - `hkNullCollisionFilter` - No filtering (all collisions)
+   - `hkGroupCollisionFilter` - Group mask filtering (32 groups)
+   - `hkPairwiseCollisionFilter` - Per-pair collision rules
+   - `hkDisableEntityCollisionFilter` - Disable specific entity pairs
+   - `hkCollisionFilterList` - Composite filter (chain multiple)
+   
+   **Collision Detection:**
+   - `collisionLookupTable` - Hash table for pair caching
+   - `collisionGroups` - 32-bit group mask per object
+   - `noGroupCollisionEnabled` - Override group filtering
+   - `collisionTolerance` - Penetration depth tolerance
+   
+   **Event System:**
+   - `CollisionListnr` - Listener interface
+   - `collisionListeners` - List of registered listeners
+   - `collisionDetails` - Detailed contact info (normal, depth, position)
+   - `collisionEntries` - Ring buffer of collision events
+   
+   **Collision Response:**
+   - `toiCollisionResponseRotateNormal` - TOI (Time of Impact) normal rotation
+   - Supports continuous vs. discrete collision modes
+   - Heightfield optimization: `cylBaseRadiusFactorForHeightFieldCollisions`
+
+4. **Raycasting:**
+   - **MOPP (Memory Optimized Partial Polytope):**
+     - `hkMoppAabbCastVirtualMachine.cpp` - VM for raycast acceleration
+     - Hierarchical AABB tree for fast broad-phase
+     - Virtual machine interprets MOPP bytecode
+   
+   - **Linear Cast:**
+     - `iterativeLinearCastMaxIterations` - Max iterations for swept tests
+     - `iterativeLinearCastEarlyOutDistance` - Early termination threshold
+     - `maxCastIterations` - Global raycast iteration limit
+   
+   - Use cases: line-of-sight, projectile paths, ground detection
+
+5. **Deactivation (Sleep) System:**
+   - `hkFakeRigidBodyDeactivator` - No deactivation (always active)
+   - `hkSpatialRigidBodyDeactivator` - Spatial partitioning-based sleep
+   - `shouldActivateOnRigidBodyTransformChange` - Reactivation trigger
+   - Performance optimization: sleeping bodies skip simulation
+
+6. **Specialized Systems:**
+   - `CollisionMesh` - Static triangle mesh collision
+   - `PhysicsMotion` - Motion state enum/flags
+   - `PluginCollisionMesh` - Plugin-based mesh import
+   - Character controller (not yet fully documented)
+
+**Havok Integration Notes:**
+- Mixed version (3.x → 4.0) suggests mid-project upgrade
+- Evaluation key validation (stripped in release)
+- RenderWare pipeline exports HKX data
+- Component enable checks for Havok Prime features
+- Collision agent registration order matters (custom types first)
+
+### Zone Streaming System
+
+**Architecture:**
+```
+[Player] → [Trigger Volume] → [Streaming Manager]
+                                      ↓
+                    ┌─────────────────┴─────────────────┐
+                    ↓                                   ↓
+            [Load Zones 1-4]                  [Unload Zones 1-3]
+                    ↓                                   ↓
+            [Preload Triggers]               [Unload Triggers]
+                    ↓                                   ↓
+            [Asset Loaded]                   [Memory Freed]
+```
+
+**Components:**
+
+1. **Load Zones (4 concurrent):**
+   - `LoadZone1`, `LoadZone2`, `LoadZone3`, `LoadZone4`
+   - Each zone represents a spatial region with associated assets
+   - `LOAD_ZONE` - Message to start loading
+   - `HybridLoadZone` - Trigger volume for hybrid streaming
+
+2. **Unload Zones (3 concurrent):**
+   - `UnloadZone1`, `UnloadZone2`, `UnloadZone3`
+   - `UnloadZoneName` - Named unload trigger
+   - `UNLOAD_ZONE` - Message to start unloading
+   - Frees memory as player moves away
+
+3. **Preload Triggers:**
+   - `HybridCutscenePreloadTrigger` - Preload cutscene assets
+   - `OC_01_EntranceHall_PreloadBox` - Named preload volume
+   - `Herbology_Corridor_ZonePreload` - Corridor-specific preload
+   - Prevents hitches during cutscenes/transitions
+
+4. **No-Load Boundaries:**
+   - `HybridNoLoadBox` - Volume that prevents streaming
+   - Used for small rooms, hallways (keep loaded)
+
+**Streaming States:**
+- `MSG_GAME_LOADING` - Global loading state
+- `EnterLoadingState` - Enter loading screen state machine
+- `LoadLevelState` - Level-specific loading
+- `LoadingScreenDisable` - Disable loading screen (seamless streaming)
+
+**Hybrid Streaming:**
+- Seamless zone transitions without loading screens
+- 4 load zones + 3 unload zones = 7-zone window
+- Preload triggers eliminate visible loading
+- HybridLoadZone triggers start background loads
+
+### Asset Loading System
+
+**Resource Handler Architecture (GOF Framework):**
+```cpp
+class ResourceHandler {
+    virtual bool Initialise() = 0;
+    virtual bool Load(const char* filename, void** outData) = 0;
+    virtual void Unload(void* data) = 0;
+};
+```
+
+**Handler Types:**
+1. `GOF::ResourceHandlers::Babble` - Dialogue/subtitle data
+2. `GOF::ResourceHandlers::HullResourceHandler` - Collision hulls
+3. `GOF::ResourceHandlers::SplineResourceHandler` - Path splines
+4. `EAUK::MEMCARD::Icon::RegisterAsset` - Memory card icons
+5. `ModelAssetManager` - 3D model assets
+6. `Component::Animate::LoadRCB` - RCB animation files
+
+**Loading Pipeline:**
+1. **Pre-allocation Phase:**
+   ```
+   Loading %s: pre-allocated %d for header and %d for body buffers
+   ```
+   - Allocates header buffer (metadata)
+   - Allocates body buffer (actual data)
+   - Prevents fragmentation during load
+
+2. **Load Phase:**
+   ```
+   Entry %s loaded successfully
+   ```
+   - Reads from disk/archive
+   - Decompression (if applicable)
+   - Parsing and validation
+
+3. **Validation Phase:**
+   ```
+   Check validity of loaded data
+   ERROR: TrinitySequencer::parseResource : sequence binary resource isn't valid
+   ```
+   - Format validation
+   - Version checks
+   - CRC/checksum verification
+
+4. **Registration Phase:**
+   - Adds to asset manager lookup tables
+   - Registers with subsystems (renderer, physics, etc.)
+
+**Save/Load System:**
+- `LoadGame` / `Load_Game_Options` - Load save file
+- `*Loading Save Game: %s...` - Save file loading
+- `MSG_LOAD_COMPLETE` / `MSG_LOAD_FAILED` - Result messages
+- `%s_Load_Save_Locator` - Save point markers in levels
+- `%s_Load_Locator` - General load point markers
+
+**Memory Management:**
+- Pre-allocation preferred over dynamic allocation
+- Header/body buffer split for streaming
+- Warning when using dynamic allocation:
+  ```
+  Should be using an overloaded method for this function using 
+  preallocated rather than dynamically allocated memory
+  ```
+
+**File Formats:**
+- **RCB** - Animation data (`Component::Animate::LoadRCB`)
+- **SpellList** - Spell definitions (`10.4_SpellList`)
+- **HKX** - Havok physics data (via RenderWare plugin)
+- **Babble** - Dialogue/audio data
+- **Hull** - Collision hull data
+- **Spline** - Path spline data
+- **Trinity sequences** - Cutscene data (binary format)
+
+**Font Loading:**
+- `cRealFont::Load()` - Font resource loader
+- `FONT::Load()` - Alternate font loader
+- Separate warning paths suggest multiple font systems (UI vs. in-game)
+
+### Animation System
+
+**Skeletal Animation:**
+```cpp
+struct SkinnedMesh {
+    uint32_t numBonesPerVertex;      // 1-4 bones per vertex
+    uint32_t boneIndexOffset;        // Offset to bone index array
+    uint32_t boneWeightOffset;       // Offset to bone weight array
+    // Indices and weights stored in vertex buffer
+};
+```
+
+**GPU Skinning:**
+- Bone indices and weights in vertex attributes
+- Shader performs matrix palette skinning
+- Up to 4 bones per vertex (typical for character meshes)
+
+**Blend Shapes (Morph Targets):**
+- `blendParams` - Blend shape weight parameters (array)
+- `blendspecularTint` - Per-blend-shape specular tint modulation
+- Used for facial animation, expressions, lip-sync
+- Shader-level blending with lighting interaction
+
+**Animation Data:**
+- 587+ animation-related strings found
+- RCB file format for animation data
+- Blend shape arrays suggest dozens of morph targets per character
+- Specular tint blending indicates advanced material system
+
+**Blend Shape Application:**
+```
+BaseGeometry + (BlendShape1 * weight1) + (BlendShape2 * weight2) + ...
+SpecularTint = baseSpecular * (1 + blendSpecularTint1 * weight1 + ...)
+```
+
+### AI System
+
+**State Machine:**
+```
+                 ┌─────────────┐
+                 │    Idle     │◄───────┐
+                 └──────┬──────┘        │
+                        │               │
+        ┌───────────────┼───────────────┤
+        │               │               │
+    ┌───▼────┐    ┌────▼─────┐    ┌───▼────┐
+    │ Patrol │    │  Attack  │    │ Wander │
+    └───┬────┘    └────┬─────┘    └───┬────┘
+        │              │               │
+        └──────────────┴───────────────┘
+```
+
+**AI States:**
+- **Idle Variants:**
+  - `Idle` - Base idle state
+  - `scared_idle`, `angry_idle`, `sulking_idle` - Emotional states
+  - `shy_idle`, `excited_idle`, `confused_idle`, `sarcastic_idle` - Personality states
+  - `gs_idle_breathe` - Breathing animation idle
+  - `Scare_Owl_idle_breathe` - Creature-specific idle
+
+- **Active States:**
+  - `attack` - Combat/attack behavior
+  - `chess:attack` - Special case for animated chess pieces
+  - Chase behaviors (see below)
+
+**Patrol System:**
+- **Locator-Based Waypoints:**
+  - `Grand_Staircase_Lower_GryffStudent_PatrolLocator_1/2/3`
+  - Named patrol points placed in levels
+  - NPCs cycle through patrol locator list
+
+- **Wandering:**
+  - `HybridScriptWanderMusicActions` - Scripted wandering with music
+  - `WANDER_MUSIC_GLOBAL` - Global wandering music flag
+  - Navigation points:
+    - `DH_Wandering_ExitCastle` / `UH_Wandering_ExitCastle`
+    - `DH_Wandering_EnterFromExt` / `UH_Wandering_EnterFromExt`
+  - DH/UH likely = Daytime Hours / Unused Hours or similar variants
+
+**Chase System:**
+- `FLYING_BOOK_CHASE_SNITCH` - Flying book chasing golden snitch
+- `Owlery_Interior_OwlChaseTrigger` - Owl chase trigger volume
+- `Nag-ChaseOwl` - Chase owl reminder/nag message
+- `LW01_Chase_End` - Chase sequence end marker
+- `MoM_DC_Chase_Locator` - Ministry of Magic chase locator
+
+**Movement Behaviors:**
+
+**Sidle/Ledge System:**
+```
+[Normal Movement] → [Ledge Edge] → sidle_idle_left/right
+                                          ↓
+                        ┌─────────────────┴─────────────────┐
+                        │                                   │
+                  sidle_left/right                    sidle_to_climb
+                        │                                   │
+                        ↓                                   ↓
+              sidle_hit_left/right          climb_from_sidle_left/right
+                                                      ↓
+                                      climb_from_sidle_left/right_jump
+```
+
+**Sidle Components:**
+- `Agent Can Sidle` - AI capability flag (not all NPCs can sidle)
+- Directional sidle: `sidle_left`, `sidle_right`
+- Idle on ledge: `sidle_idle_left`, `sidle_idle_right`
+- Hit reactions: `sidle_hit_left`, `sidle_hit_right`
+- Climb integration: `sidle_to_climb`, `climb_from_sidle_left/right`
+- Jump variants: `climb_from_sidle_left/right_jump`
+- Level geometry: `Sidle_Ledge_1_Med_1` (ledge markers)
+- Player prompts: `PROMPT_CLIMB_SIDLE_LEFT/RIGHT/FAST`
+
+**Animation Behaviors:**
+- `Roll behavior` - Rolling animation state
+- `Loop behavior` - Looping animation state
+- `8broadPhaseBorderBehaviour` / `BroadPhaseBorderBehaviour` - Physics broad-phase behavior (border handling)
+
+**Combat:**
+- `OnMeleeAttack` - Melee attack event
+- `AudioMospAttackStart` / `AudioMospAttackStop` - Mosp creature attack audio
+- `NifflerTimeAttackMiniGameInfo` - Niffler mini-game parameters
+
+**AI Architecture:**
+- State-based with emotional/personality modifiers
+- Locator-driven patrol and wandering
+- Hybrid scripting for complex sequences
+- Capability flags for per-NPC features (sidle, etc.)
+- Mini-game AI with specialized parameters
+
+### UI System
+
+**Screen Architecture:**
+```
+Splash → 2.0_Main_Menu ← packshot_2_mainmenu
+              ↓
+        ┌─────┴─────┐
+        │           │
+  New Game    Load Game (4.0_Load_Game)
+        │           │
+        └─────┬─────┘
+              ↓
+         Game World
+```
+
+**Menu Screens:**
+- `2.0_Main_Menu` - Main menu (version 2.0)
+- `start_menu` - Start/pause menu
+- `4.0_Load_Game` - Load game screen (version 4.0)
+- `LW_LOADGAME` / `GUI_LOADGAME` - Load game GUI elements
+- `newgame_2_mainmenu`, `main_menu_newgame` - Bidirectional transitions
+- `packshot_2_mainmenu` - Pack shot to main menu
+
+**GUI Elements:**
+- `GUI_PRESS_START` - Start prompt
+- `GUI_TASKS` - Task list menu
+- `GUI_LOCATIONS` - Location/map menu
+- `GUI_PERCENT_DISCOVERED` - Discovery completion percentage
+- `GUI_SYMBOL_PERCENT` - Percent symbol rendering
+- `gui_audio` - Audio settings menu
+- `GUI_YES` / `GUI_NO` - Confirmation dialog buttons
+- `GUI_CONFIRMSAVE` - Save confirmation dialog
+- `GUI_MEMORYCARD_REMOVED_DISABLE_AUTOSAVE` - Memory card warning
+
+**Input Mapping:**
+- **Generic Buttons:** `BUTTON1` through `BUTTON32` (32 button support)
+- **Xbox:** `ButtonX`, `ButtonA`
+- **PlayStation:** `button_square`
+- Multi-platform abstraction with 32-button capacity
+
+**Message System:**
+- `MSG_GAME_LOADING` - Loading message ID
+- `MSG_LOAD_COMPLETE` - Load success message
+- `MSG_LOAD_FAILED` - Load failure message
+- Message-based UI updates (decoupled from game logic)
+
+**UI Versioning:**
+- Screens have version numbers (2.0_, 4.0_)
+- Suggests iterative UI redesigns or A/B testing
+- Version prefix indicates UI revision
+
+### Summary of Iteration 8 Achievements
+
+**Third-Party Libraries Identified:**
+1. Havok Physics 3.x/4.x - Full physics simulation
+2. RenderWare Graphics - Asset pipeline
+3. Trinity Sequencer (EA) - Cutscene system
+4. GOF Framework (EA UK) - Resource management
+
+**Major Systems Documented:**
+1. **Spell Casting:**
+   - Event-driven state machine
+   - Animation/audio integration
+   - Context-sensitive rules
+   - Achievement tracking
+
+2. **Physics (Havok):**
+   - Rigid body dynamics
+   - Multi-layer collision filtering
+   - MOPP raycast acceleration
+   - Deactivation/sleep system
+   - Keyframed motion for animation
+
+3. **Zone Streaming:**
+   - 4 load zones + 3 unload zones
+   - Preload triggers for seamless streaming
+   - Hybrid streaming without loading screens
+
+4. **Asset Loading:**
+   - Type-specific resource handlers
+   - Pre-allocation for fragmentation prevention
+   - Validation pipeline
+   - RCB, HKX, Babble, Hull, Spline formats
+
+5. **Animation:**
+   - GPU skeletal skinning
+   - Blend shapes with specular tint
+   - RCB file format
+
+6. **AI:**
+   - State machine with personality variants
+   - Locator-based patrol/wandering
+   - Sidle/ledge traversal
+   - Chase behaviors
+   - Mini-game AI
+
+7. **UI:**
+   - Screen-based architecture
+   - Multi-platform input (32 buttons)
+   - Message-driven updates
+   - Versioned UI screens
+
+**File Formats:**
+- RCB - Animation data
+- HKX - Havok physics (via RenderWare)
+- SpellList - Spell definitions
+- Babble - Dialogue data
+- Hull - Collision hulls
+- Spline - Path data
+- Trinity sequences - Cutscene scripts
+
+**Next Implementation Priorities:**
+1. Havok physics stub/wrapper for C++ decompilation
+2. Spell system state machine
+3. Zone streaming manager
+4. Resource handler framework
+5. AI state machine with sidle system
+6. Animation blend shape system
+7. UI screen state machine

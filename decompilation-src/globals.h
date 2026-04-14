@@ -5,6 +5,7 @@
 #include <mmsystem.h>
 #include <d3d9.h>
 #include <dinput.h>
+#include <dsound.h>
 
 // ── Default window dimensions ─────────────────────────────────────────────────
 static const int DEFAULT_WINDOW_WIDTH  = 640;
@@ -123,6 +124,17 @@ enum GamePauseState {
 struct CallbackSlot {
     void (*func)(void* context);  // Callback function pointer
     void* context;                 // Context data passed to callback
+};
+
+// DirectSound globals (iteration 8)
+struct DirectSoundContext {
+    IDirectSound8* pDirectSound;           // Main DirectSound interface
+    IDirectSoundBuffer* pPrimaryBuffer;    // Primary buffer
+    IDirectSoundBuffer8* pSecondaryBuffer; // Secondary/streaming buffer
+    DWORD bufferSize;                      // Buffer size in bytes
+    DWORD writePos;                        // Current write position
+    bool isPlaying;                        // Playback state
+    WAVEFORMATEX waveFormat;               // Audio format
 };
 
 // Audio command structure for async audio operations
@@ -529,5 +541,269 @@ extern void* g_pEngineRootObject;  // DAT_00bef6d0 (2904 bytes)
 // Callback manager entries
 extern void* g_pCallbackManager_Primary;    // DAT_00e6e870
 extern void* g_pCallbackManager_Secondary;  // DAT_00e6e874
+
+// DirectSound context (iteration 8)
+extern DirectSoundContext* g_pDirectSoundContext;
+
+// Input system instance (iteration 8)
+extern RealInputSystem* g_pRealInputSystem;  // DAT_00be8758
+
+// ── Iteration 8: High-Level Game Systems ──────────────────────────────────────
+
+// ── Spell System Structures ───────────────────────────────────────────────────
+
+enum SpellCastState {
+    SPELL_IDLE = 0,
+    SPELL_BEFORE_CAST,
+    SPELL_GESTURE_RECOGNITION,
+    SPELL_GOOD_CAST,
+    SPELL_SUCCESSFUL_CAST,
+    SPELL_AFTER_CAST,
+    SPELL_FAILED_TO_CAST
+};
+
+enum SpellType {
+    SPELL_INVALID = -1,
+    SPELL_FINITE = 0,        // Cancel all active spells
+    SPELL_WINGARDIUM,        // Levitation
+    SPELL_CARPE,            // Seize/Summon
+    SPELL_COMBAT_01,        // Combat spell variants
+    SPELL_COMBAT_02,
+    SPELL_COMBAT_03,
+    SPELL_COMBAT_04,
+    SPELL_COMBAT_05,
+    SPELL_COMBAT_06,
+    SPELL_COMBAT_07,
+    SPELL_PATRONUS,         // Special patronus spell
+    // ... more spells to be discovered
+};
+
+enum WandDisciplineState {
+    WAND_HOLSTERED_SAFE = 0,     // WANDINNOTSCARED - holstered, NPCs neutral
+    WAND_OUT_SAFE,               // WANDOUTNOTPUNISH - out in safe zone
+    WAND_OUT_RESTRICTED,         // WANDOUTPUNISH - out in restricted zone
+    WAND_DRAWING                 // DRAWS_WAND - transition state
+};
+
+struct SpellCastEvent {
+    SpellCastState state;
+    SpellType spellType;
+    float accuracy;              // Gesture accuracy (0.0-1.0)
+    float castTime;              // Time taken for gesture (seconds)
+    int targetID;                // Target object/NPC ID (if applicable)
+    void* pUserData;             // Context-specific data
+};
+
+struct SpellSystemState {
+    SpellCastState currentState;
+    SpellType lastCastSpell;
+    int successfulCastsCount;    // For achievement tracking (SUCCESSFUL_SPELLS_CAST_500)
+    WandDisciplineState wandState;
+    bool gestureInProgress;
+    // Gesture recognition data (to be expanded)
+    float gestureStartTime;
+    // ... more fields to be discovered
+};
+
+// ── Physics System (Havok) Stub Structures ────────────────────────────────────
+
+// Havok physics is a third-party library, so we define minimal stubs for decompilation
+// The actual implementation would link against Havok SDK
+
+struct hkPhysicsSystem {
+    void* vtable;
+    void* worldData;
+    int rigidBodyCount;
+    void* rigidBodies;           // Array of hkRigidBody*
+    void* collisionFilter;       // hkCollisionFilter*
+    int versionMajor;            // 3 or 4
+    int versionMinor;
+    // ... extensive Havok internal state
+};
+
+struct hkRigidBody {
+    void* vtable;
+    void* motionState;           // Position, rotation, velocity
+    void* collisionShape;        // Geometry
+    void* deactivator;           // Sleep system
+    unsigned int collisionGroup; // 32-bit group mask
+    // ... more Havok fields
+};
+
+enum hkMotionType {
+    HK_MOTION_FIXED = 0,         // hkFixedRigidMotion - static
+    HK_MOTION_KEYFRAMED,         // hkKeyframedRigidMotion - animated
+    HK_MOTION_DYNAMIC            // Full physics simulation
+};
+
+// ── Zone Streaming Structures ─────────────────────────────────────────────────
+
+enum ZoneLoadState {
+    ZONE_UNLOADED = 0,
+    ZONE_LOADING,
+    ZONE_LOADED,
+    ZONE_UNLOADING
+};
+
+struct LoadZone {
+    char zoneName[64];
+    ZoneLoadState state;
+    void* pAssetList;            // List of assets to load
+    size_t memoryUsed;           // Memory consumed by this zone
+    int priority;                // Load priority (0-3)
+};
+
+struct StreamingManager {
+    LoadZone loadZones[4];       // 4 concurrent load zones
+    LoadZone unloadZones[3];     // 3 concurrent unload zones
+    bool loadingScreenActive;
+    bool hybridStreamingActive;  // Seamless streaming without screen
+    float playerPosX, playerPosY, playerPosZ;  // Player position for streaming
+    // ... more fields
+};
+
+// ── Asset Loading (GOF Framework) Structures ───────────────────────────────────
+
+enum ResourceType {
+    RESOURCE_MODEL = 0,
+    RESOURCE_TEXTURE,
+    RESOURCE_ANIMATION_RCB,      // RCB animation files
+    RESOURCE_PHYSICS_HKX,        // Havok HKX physics data
+    RESOURCE_AUDIO_BABBLE,       // Dialogue/subtitle data
+    RESOURCE_COLLISION_HULL,     // Collision hulls
+    RESOURCE_PATH_SPLINE,        // Path splines
+    RESOURCE_CUTSCENE_TRINITY,   // Trinity sequencer data
+    RESOURCE_FONT,
+    RESOURCE_UI,
+    // ... more types
+};
+
+struct ResourceHandler {
+    void* vtable;                // Virtual methods: Initialise, Load, Unload
+    ResourceType type;
+    const char* extension;       // File extension (".rcb", ".hkx", etc.)
+};
+
+struct AssetEntry {
+    char filename[MAX_PATH];
+    ResourceType type;
+    void* pData;                 // Loaded resource data
+    size_t headerSize;           // Pre-allocated header buffer size
+    size_t bodySize;             // Pre-allocated body buffer size
+    bool isLoaded;
+};
+
+struct AssetManager {
+    AssetEntry* pAssetTable;     // Hash table of loaded assets
+    int assetCount;
+    int maxAssets;
+    ResourceHandler* handlers[16]; // Handler per resource type
+};
+
+// ── Animation System Structures ────────────────────────────────────────────────
+
+struct BlendShape {
+    char name[64];
+    float weight;                // 0.0-1.0
+    float specularTint;          // Specular modulation
+    void* pMorphTargetData;      // Vertex deltas
+};
+
+struct SkeletalMesh {
+    int numBones;
+    int numBonesPerVertex;       // 1-4
+    unsigned int boneIndexOffset;   // Offset in vertex buffer
+    unsigned int boneWeightOffset;  // Offset in vertex buffer
+    void* pBoneMatrices;         // Matrix palette for GPU skinning
+    BlendShape* pBlendShapes;    // Array of blend shapes
+    int blendShapeCount;
+};
+
+// ── AI System Structures ──────────────────────────────────────────────────────
+
+enum AIState {
+    AI_IDLE = 0,
+    AI_IDLE_SCARED,
+    AI_IDLE_ANGRY,
+    AI_IDLE_SULKING,
+    AI_IDLE_SHY,
+    AI_IDLE_EXCITED,
+    AI_IDLE_CONFUSED,
+    AI_IDLE_SARCASTIC,
+    AI_PATROL,
+    AI_WANDER,
+    AI_CHASE,
+    AI_ATTACK,
+    AI_SIDLE,                    // Ledge sidling
+    AI_FLEE
+};
+
+struct AILocator {
+    char name[64];
+    float posX, posY, posZ;
+    int nextLocatorIndex;        // For patrol routes
+};
+
+struct AIAgent {
+    AIState currentState;
+    AIState previousState;
+    bool canSidle;               // "Agent Can Sidle" capability flag
+    int patrolLocatorCount;
+    int currentPatrolLocator;
+    AILocator* pPatrolLocators;  // Array of patrol points
+    float stateTimer;            // Time in current state
+    // ... more fields
+};
+
+// ── UI System Structures ──────────────────────────────────────────────────────
+
+enum UIScreen {
+    UI_SPLASH = 0,
+    UI_MAIN_MENU_2_0,            // "2.0_Main_Menu"
+    UI_START_MENU,
+    UI_LOAD_GAME_4_0,            // "4.0_Load_Game"
+    UI_TASKS,
+    UI_LOCATIONS,
+    UI_AUDIO_SETTINGS,
+    UI_IN_GAME,
+    // ... more screens
+};
+
+enum UIMessage {
+    MSG_GAME_LOADING = 0,
+    MSG_LOAD_COMPLETE,
+    MSG_LOAD_FAILED,
+    MSG_PRESS_START,
+    MSG_CONFIRM_SAVE,
+    MSG_YES,
+    MSG_NO,
+    MSG_MEMCARD_REMOVED,
+    // ... more messages
+};
+
+struct UIButton {
+    int id;                      // BUTTON1-BUTTON32
+    bool isPressed;
+    bool wasPressed;             // For edge detection
+    const char* label;
+};
+
+struct UISystem {
+    UIScreen currentScreen;
+    UIScreen previousScreen;
+    UIButton buttons[32];        // 32 button support
+    int messageQueueHead;
+    int messageQueueTail;
+    UIMessage messageQueue[64];
+    // ... more fields
+};
+
+// ── Global instances ──────────────────────────────────────────────────────────
+
+extern SpellSystemState* g_pSpellSystem;
+extern hkPhysicsSystem* g_pHavokPhysics;
+extern StreamingManager* g_pStreamingManager;
+extern AssetManager* g_pAssetManager;
+extern UISystem* g_pUISystem;
 
 #endif // GLOBALS_H

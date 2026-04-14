@@ -1,0 +1,78 @@
+@.data
+asset
+LoadGame
+Load_Game_Options
+Level_Load
+4.0_Load_Game
+LW_LOADGAME
+UnloadZoneName
+UnloadZone3
+UnloadZone2
+UnloadZone1
+LoadZone4
+LoadZone3
+LoadZone2
+LoadZone1
+HybridCutscenePreloadTrigger
+HybridNoLoadBox
+OC_01_EntranceHall_PreloadBox
+Component::Animate::LoadRCB
+MSG_GAME_LOADING
+DisableHeadLoading
+UnloadZoneName3
+UnloadZoneName2
+Herbology_Corridor_ZonePreload
+&>HybridAIResourcePoint
+GUI_LOADGAME
+UNLOAD_ZONE
+LOAD_ZONE
+%s_Load_Save_Locator
+%s_Load_Locator
+tf_newspaper_loadnewgame
+LoadingScreenDisable
+EnterLoadingState
+LoadLevelState
+HybridLoadZone
+GOF::ResourceHandlers::Babble::Initialise
+GOF::ResourceHandlers::HullResourceHandler::Initialise
+GOF::ResourceHandlers::SplineResourceHandler::Initialise
+EAUK::MEMCARD::Icon::RegisterAsset
+Loading %s: pre-allocated %d for header and %d for body buffers
+Check validity of loaded data
+Entry %s loaded successfully
+*Loading Save Game: %s...
+MSG_LOAD_COMPLETE
+MSG_LOAD_FAILED
+cRealFont::Load() WARNING - failed to load resource!
+ModelAssetManager
+ERROR: TrinitySequencer::parseResource : sequence binary resource isn't valid
+Should be using an overloaded method for this function using preallocated rather than dynamically allocated mamory
+FONT::Load() WARNING - failed to load resource!
+cSHAPE::Load : ERROR : Unsupported shape file type %s
+cSHAPE_FILE::Load - WARNING UNKNOWN SHAPE CATEGORY
+cSHAPE_FILE::Load - WARNING Negative Link encountered
+cTARGA_FILE::Load
+EngineTextureManager::On_Register_Texture_UnLoad - texture is corrupt!
+EngineTextureManager::On_Register_Texture_Load : Texture Was Not Found? %s
+EngineTextureManager::On_Register_Texture_Load : %s Resource.GetpBuffer returned NULL
+EngineTextureManager::On_Register_Texture_Load : Texture Seems to be Corrupt (filesize too small!) %s
+EngineTextureManager:: On_Register_Texture_Load WARNING - %s has bad size(%d x %d) - replaced with NULL
+SAS::AsyncStreamManager::Load
+Attempt to load %s into slot %d before unload has completed
+Havok::HavokResource::HavokDataResourceHeader
+Audio::AudioMain::Init::SpeechResourceHandlerInstance
+Audio::AudioMain::Init::ReverbResourceHandlerInstance
+Audio::AudioMain::Init::MixerResourceHandlerInstance
+Audio::AudioMain::Init::MusicResourceHandlerInstance
+Audio::AudioMain::Init::AudioBankResourceHandlerInstance
+Audio::AudioMain::Init::BankHeaderResourceHandlerInstance
+Audio::AudioMain::Init::AudioResourceHandlerInstance
+Audio::AudioServicesHandler::InitServices::ResourceManagerInstance
+CSRMBank::ProcessLoad - Failed to load bank '%s'
+CSampleData::GetSampleIndex - Bank not loaded (%s)
+LoadCursorA
+LoadLibraryA
+.?AVhkToiResourceMgr@@
+.?AVhkDefaultToiResourceMgr@@
+.?AVhkFinishLoadedObjectRegistry@@
+.?AVhkResource@@

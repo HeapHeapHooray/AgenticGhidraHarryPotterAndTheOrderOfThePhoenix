@@ -14,6 +14,7 @@ $ZIG c++ \
     -lole32 \
     -luuid \
     -lwinmm \
+    -ldsound \
     -mwindows \
     main.cpp \
     -o ../hp_decompiled.exe

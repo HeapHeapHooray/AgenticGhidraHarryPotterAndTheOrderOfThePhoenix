@@ -1,0 +1,61 @@
+openjdk version "21.0.10" 2026-01-20
+OpenJDK Runtime Environment (build 21.0.10+7-Ubuntu-124.04)
+OpenJDK 64-Bit Server VM (build 21.0.10+7-Ubuntu-124.04, mixed mode)
+INFO  Using log config file: jar:file:/snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/heap/.config/ghidra/ghidra_12.0_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/heap/.config/ghidra/ghidra_12.0_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (681 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (SSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (ApplicationTrustManagerFactory)  
+INFO  Headless startup complete (1319 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 58 extension points (18 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /home/heap/Documents/AgenticGhidraDecompilationHP/./scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/heap/Documents/AgenticGhidraDecompilationHP/./HP_Project (HeadlessAnalyzer)  
+INFO  Opening project: /home/heap/Documents/AgenticGhidraDecompilationHP/./HP_Project (HeadlessProject)  
+INFO  REPORT: Processing project file: /hp.exe (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: ExploreIter8.java  (HeadlessAnalyzer)  
+ERROR REPORT SCRIPT ERROR: ExploreIter8.java : The class could not be found. It must be the public class of the .java file: Failed to get OSGi bundle containing script: /home/heap/Documents/AgenticGhidraDecompilationHP/./scripts/ExploreIter8.java (HeadlessAnalyzer) ghidra.app.script.GhidraScriptLoadException: The class could not be found. It must be the public class of the .java file: Failed to get OSGi bundle containing script: /home/heap/Documents/AgenticGhidraDecompilationHP/./scripts/ExploreIter8.java
+	at ghidra.app.script.JavaScriptProvider.getScriptInstance(JavaScriptProvider.java:114)
+	at ghidra.app.util.headless.HeadlessAnalyzer.runScriptsList(HeadlessAnalyzer.java:924)
+	at ghidra.app.util.headless.HeadlessAnalyzer.analyzeProgram(HeadlessAnalyzer.java:1005)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processFileNoImport(HeadlessAnalyzer.java:1184)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processFolderNoImport(HeadlessAnalyzer.java:1356)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processNoImport(HeadlessAnalyzer.java:1385)
+	at ghidra.app.util.headless.HeadlessAnalyzer.processLocal(HeadlessAnalyzer.java:459)
+	at ghidra.app.util.headless.AnalyzeHeadless.launch(AnalyzeHeadless.java:199)
+	at ghidra.GhidraLauncher.launch(GhidraLauncher.java:81)
+	at ghidra.Ghidra.main(Ghidra.java:54)
+Caused by: java.lang.ClassNotFoundException: Failed to get OSGi bundle containing script: /home/heap/Documents/AgenticGhidraDecompilationHP/./scripts/ExploreIter8.java
+	at ghidra.app.script.JavaScriptProvider.loadClass(JavaScriptProvider.java:163)
+	at ghidra.app.script.JavaScriptProvider.getScriptInstance(JavaScriptProvider.java:97)
+	... 9 more
+ 
+INFO  REPORT: Save succeeded for processed file: /hp.exe (HeadlessAnalyzer)  
