@@ -405,7 +405,12 @@ public class AnnotateIter6 extends GhidraScript {
 
     private void annotateFunc(String addrStr, String name, String comment) {
         try {
-            Address addr = currentProgram.parseAddress(addrStr);
+            Address[] addrs = currentProgram.parseAddress(addrStr);
+            if (addrs == null || addrs.length == 0) {
+                println(String.format("  ✗ Invalid address: %s", addrStr));
+                return;
+            }
+            Address addr = addrs[0];
             Function func = fm.getFunctionAt(addr);
             
             if (func != null) {
@@ -426,7 +431,12 @@ public class AnnotateIter6 extends GhidraScript {
 
     private void annotateData(String addrStr, String name, String comment) {
         try {
-            Address addr = currentProgram.parseAddress(addrStr);
+            Address[] addrs = currentProgram.parseAddress(addrStr);
+            if (addrs == null || addrs.length == 0) {
+                println(String.format("  ✗ Invalid address: %s", addrStr));
+                return;
+            }
+            Address addr = addrs[0];
             
             // Create or get symbol
             Symbol[] symbols = symTable.getSymbols(addr);
@@ -439,11 +449,8 @@ public class AnnotateIter6 extends GhidraScript {
                 symbol = symTable.createLabel(addr, name, SourceType.USER_DEFINED);
             }
             
-            // Set comment at address
-            CodeUnit cu = listing.getCodeUnitAt(addr);
-            if (cu != null) {
-                cu.setComment(CodeUnit.PLATE_COMMENT, comment);
-            }
+            // Set comment at address using pre-comment instead of deprecated plate comment
+            listing.setComment(addr, CodeUnit.PRE_COMMENT, comment);
             
             println(String.format("  ✓ %s @ %s", name, addrStr));
         } catch (Exception e) {
