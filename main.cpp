@@ -51,7 +51,37 @@ void UpdateSystemParameters(bool reset) {
     }
 }
 
-// ... existing RegisterWindowClass and CreateGameWindow ...
+BOOL RegisterWindowClass(HINSTANCE hInstance) {
+    UnregisterClassA("OrderOfThePhoenixMainWndClass", hInstance);
+
+    WNDCLASSA wc = {0};
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = hInstance;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.lpszClassName = "OrderOfThePhoenixMainWndClass";
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    wc.style = CS_DBLCLKS | CS_OWNDC | CS_VREDRAW | CS_HREDRAW;
+
+    return RegisterClassA(&wc) != 0;
+}
+
+HWND CreateGameWindow(HINSTANCE hInstance, int width, int height) {
+    RECT rect = {0, 0, width, height};
+    DWORD dwStyle = bIsFullscreen ? WS_POPUP : WS_OVERLAPPEDWINDOW;
+    AdjustWindowRectEx(&rect, dwStyle, FALSE, 0);
+
+    HWND hWnd = CreateWindowExA(
+        0,
+        "OrderOfThePhoenixMainWndClass",
+        "Harry Potter and the Order of the Phoenix",
+        dwStyle,
+        CW_USEDEFAULT, CW_USEDEFAULT,
+        rect.right - rect.left, rect.bottom - rect.top,
+        NULL, NULL, hInstance, NULL
+    );
+
+    return hWnd;
+}
 
 void MainLoop() {
     MSG msg;
