@@ -16,10 +16,10 @@ $ZIG c++ \
     -lwinmm \
     -mwindows \
     main.cpp \
-    -o hp_decompiled.exe
+    -o ../hp_decompiled.exe
 
 if [ $? -eq 0 ]; then
-    echo "Build successful: hp_decompiled.exe"
+    echo "Build successful: ../hp_decompiled.exe"
 else
     echo "Build failed"
     exit 1
