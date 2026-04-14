@@ -7,8 +7,8 @@
 HWND ghWnd = NULL;
 bool bIsFullscreen = false;
 bool bHasFocus = true;
-int gWidth = 640;
-int gHeight = 480;
+int gWidth = DEFAULT_WINDOW_WIDTH;
+int gHeight = DEFAULT_WINDOW_HEIGHT;
 
 IDirect3D9* g_pD3D = NULL;
 IDirect3DDevice9* g_pd3dDevice = NULL;
@@ -27,12 +27,12 @@ bool g_bExitRequested = false;
 SystemParams g_savedParams = {0};
 DWORD g_dwDelayedOpTimer = 0;
 
-char g_szCmdLine1[0x200] = {0};
-char g_szCmdLine2[0x200] = {0};
+char g_szCmdLine1[CMDLINE_BUFFER_SIZE] = {0};
+char g_szCmdLine2[CMDLINE_BUFFER_SIZE] = {0};
 
 // Registry helper functions
 int ReadRegistrySetting(const char* appName, const char* section, const char* key, int defaultValue) {
-    char regPath[512];
+    char regPath[REG_PATH_BUFFER_SIZE];
     sprintf(regPath, "Software\\Electronic Arts\\%s\\%s", appName, section);
 
     HKEY hKey;
@@ -63,7 +63,7 @@ int ReadRegistrySetting(const char* appName, const char* section, const char* ke
 }
 
 void WriteRegistrySetting(const char* appName, const char* section, const char* key, const char* value) {
-    char regPath[512];
+    char regPath[REG_PATH_BUFFER_SIZE];
     sprintf(regPath, "Software\\Electronic Arts\\%s\\%s", appName, section);
 
     HKEY hKey;
@@ -76,29 +76,29 @@ void WriteRegistrySetting(const char* appName, const char* section, const char* 
 void SaveOrRestoreSystemParameters(bool restore) {
     if (restore) {
         // Restore saved parameters
-        SystemParametersInfoA(0x3b, 8, &g_savedParams.mouseSpeed, 0);
-        SystemParametersInfoA(0x35, 8, &g_savedParams.mouseAccel, 0);
-        SystemParametersInfoA(0x33, 0x18, &g_savedParams.screenReader, 0);
+        SystemParametersInfoA(SPI_SET_MOUSE_SPEED,          SPI_MOUSE_PARAM_SIZE,         &g_savedParams.mouseSpeed,   0);
+        SystemParametersInfoA(SPI_SET_MOUSE_ACCEL,          SPI_MOUSE_PARAM_SIZE,         &g_savedParams.mouseAccel,   0);
+        SystemParametersInfoA(SPI_SET_SCREEN_READER_PARAMS, SPI_SCREEN_READER_PARAM_SIZE, &g_savedParams.screenReader, 0);
     } else {
         // Save current parameters
-        SystemParametersInfoA(0x3a, 8, &g_savedParams.mouseSpeed, 0);
-        SystemParametersInfoA(0x34, 8, &g_savedParams.mouseAccel, 0);
-        SystemParametersInfoA(0x32, 0x18, &g_savedParams.screenReader, 0);
+        SystemParametersInfoA(SPI_GET_MOUSE_SPEED,          SPI_MOUSE_PARAM_SIZE,         &g_savedParams.mouseSpeed,   0);
+        SystemParametersInfoA(SPI_GET_MOUSE_ACCEL,          SPI_MOUSE_PARAM_SIZE,         &g_savedParams.mouseAccel,   0);
+        SystemParametersInfoA(SPI_GET_SCREEN_READER_PARAMS, SPI_SCREEN_READER_PARAM_SIZE, &g_savedParams.screenReader, 0);
 
-        // Disable mouse acceleration by clearing bits 0, 2, and 3
+        // Disable mouse acceleration by clearing bits 2 and 3
         if ((g_savedParams.mouseSpeedFlags & 1) == 0) {
-            UINT modifiedFlags = g_savedParams.mouseSpeedFlags & 0xFFFFFFF3;
-            SystemParametersInfoA(0x3b, 8, &modifiedFlags, 0);
+            UINT modifiedFlags = g_savedParams.mouseSpeedFlags & MOUSE_ACCEL_FLAGS_MASK;
+            SystemParametersInfoA(SPI_SET_MOUSE_SPEED, SPI_MOUSE_PARAM_SIZE, &modifiedFlags, 0);
         }
 
         if ((g_savedParams.mouseAccelFlags & 1) == 0) {
-            UINT modifiedFlags = g_savedParams.mouseAccelFlags & 0xFFFFFFF3;
-            SystemParametersInfoA(0x35, 8, &modifiedFlags, 0);
+            UINT modifiedFlags = g_savedParams.mouseAccelFlags & MOUSE_ACCEL_FLAGS_MASK;
+            SystemParametersInfoA(SPI_SET_MOUSE_ACCEL, SPI_MOUSE_PARAM_SIZE, &modifiedFlags, 0);
         }
 
         if ((g_savedParams.screenReaderFlags & 1) == 0) {
-            UINT modifiedFlags = g_savedParams.screenReaderFlags & 0xFFFFFFF3;
-            SystemParametersInfoA(0x33, 0x18, &modifiedFlags, 0);
+            UINT modifiedFlags = g_savedParams.screenReaderFlags & MOUSE_ACCEL_FLAGS_MASK;
+            SystemParametersInfoA(SPI_SET_SCREEN_READER_PARAMS, SPI_SCREEN_READER_PARAM_SIZE, &modifiedFlags, 0);
         }
     }
 }
@@ -107,10 +107,10 @@ void LoadGameSettings() {
     const char* appName = "Harry Potter and the Order of the Phoenix";
     const char* section = "GameSettings";
 
-    gWidth = ReadRegistrySetting(appName, section, "Width", 640);
-    gHeight = ReadRegistrySetting(appName, section, "Height", 480);
-    int bitDepth = ReadRegistrySetting(appName, section, "BitDepth", 32);
-    int shadowLOD = ReadRegistrySetting(appName, section, "ShadowLOD", 6);
+    gWidth = ReadRegistrySetting(appName, section, "Width", DEFAULT_WINDOW_WIDTH);
+    gHeight = ReadRegistrySetting(appName, section, "Height", DEFAULT_WINDOW_HEIGHT);
+    int bitDepth = ReadRegistrySetting(appName, section, "BitDepth", DEFAULT_BIT_DEPTH);
+    int shadowLOD = ReadRegistrySetting(appName, section, "ShadowLOD", DEFAULT_SHADOW_LOD);
     int maxFarClip = ReadRegistrySetting(appName, section, "MaxFarClip", 0);
     int particleRate = ReadRegistrySetting(appName, section, "ParticleRate", 0);
     bIsFullscreen = ReadRegistrySetting(appName, section, "Fullscreen", 0) != 0;
@@ -135,7 +135,7 @@ void SaveWindowPlacement(HWND hWnd) {
         wp.rcNormalPosition.bottom += adjustRect.bottom;
         wp.rcNormalPosition.right += adjustRect.right;
 
-        char buffer[32];
+        char buffer[POSITION_BUFFER_SIZE];
 
         sprintf(buffer, "%ld", wp.rcNormalPosition.left);
         WriteRegistrySetting(appName, section, "PosX", buffer);
@@ -203,7 +203,7 @@ void UpdateDirectXDevice() {
     if (FAILED(hr)) {
         if (hr == D3DERR_DEVICELOST) {
             // Device is lost, sleep and retry
-            Sleep(50);
+            Sleep(DEVICE_LOST_SLEEP_MS);
             return;
         }
 
@@ -239,7 +239,7 @@ void UnacquireInputDevices() {
 
     ShowCursor(TRUE);
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < MAX_JOYSTICKS; i++) {
         if (g_pJoystick[i]) {
             g_pJoystick[i]->Unacquire();
         }
@@ -257,7 +257,7 @@ void AcquireInputDevices() {
 
     ShowCursor(FALSE);
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < MAX_JOYSTICKS; i++) {
         if (g_pJoystick[i]) {
             g_pJoystick[i]->Acquire();
         }
@@ -269,22 +269,22 @@ void GameFrameUpdate() {
     DWORD deltaTime = currentTime - g_dwLastFrameTime;
 
     // Cap delta at 100ms to prevent spiral of death
-    if (deltaTime > 100) {
-        deltaTime = 100;
+    if (deltaTime > MAX_DELTA_TIME_MS) {
+        deltaTime = MAX_DELTA_TIME_MS;
     }
 
     g_dwLastFrameTime = currentTime;
 
-    // Accumulate time (multiply by 3 for game speed)
-    g_ullAccumulatedTime += (ULONGLONG)deltaTime * 3;
+    // Accumulate time (multiply by GAME_TIME_SCALE for game speed)
+    g_ullAccumulatedTime += (ULONGLONG)deltaTime * GAME_TIME_SCALE;
 
     // Trigger game updates based on accumulated time
     // (Actual game logic would go here)
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd) {
-    // Set FPU control word to prevent denormal exceptions
-    _control87(0x20000, 0x30000);
+    // Set FPU precision to 53-bit (double) to prevent denormal exceptions
+    _control87(_PC_53, _MCW_PC);
 
     // Save and modify system parameters
     SaveOrRestoreSystemParameters(false);
@@ -373,7 +373,7 @@ void MainLoop() {
 
             // Frame rate limiting
             DWORD frameTime = GetTickCount() - startTime;
-            if (frameTime < 16) {  // Target ~60 FPS
+            if (frameTime < TARGET_FRAME_TIME_MS) {  // Target ~60 FPS
                 Sleep(0);
             }
         }
@@ -430,13 +430,13 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                     UnacquireInputDevices();
                     while (ShowCursor(TRUE) < 1);
                     bHasFocus = false;
-                    g_dwDelayedOpTimer = 2000;  // 2 second delay
+                    g_dwDelayedOpTimer = FOCUS_CHANGE_DELAY_MS;  // 2 second delay
                 } else {
                     // Gaining focus
                     AcquireInputDevices();
                     while (ShowCursor(FALSE) >= 0);
                     bHasFocus = true;
-                    g_dwDelayedOpTimer = 2000;
+                    g_dwDelayedOpTimer = FOCUS_CHANGE_DELAY_MS;
                 }
             }
             return 0;
@@ -468,7 +468,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 
         case WM_SYSCOMMAND:
             if (bIsFullscreen) {
-                WPARAM cmd = wParam & 0xFFF0;
+                WPARAM cmd = wParam & SYSCMD_MASK;
                 if (cmd == SC_MAXIMIZE || cmd == SC_SIZE ||
                     cmd == SC_MOVE || cmd == SC_KEYMENU) {
                     return 0;  // Block these commands in fullscreen
@@ -484,7 +484,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 
         case WM_ENTERMENULOOP:
             if (bIsFullscreen) {
-                return 0x10000;  // Non-zero to prevent menu
+                return MENU_LOOP_SUPPRESS;
             }
             break;
     }
