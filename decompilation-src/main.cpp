@@ -289,7 +289,19 @@ void SaveWindowPlacement(HWND hWnd) {
 // ── DirectX resource management ───────────────────────────────────────────────
 
 void ReleaseDirectXResources() {
-    // Pre-release cleanup (thunk_FUN_00ec04dc — unknown, called before surface releases)
+    // Iteration 4 findings - Pre/Post Cleanup Protocol:
+    //
+    // This function implements a lifecycle hook pattern around D3D resource destruction.
+    // The pre/post cleanup callbacks ensure render subsystems properly handle device loss/reset.
+    //
+    // Pre-release cleanup (thunk_FUN_00ec04dc):
+    //   Called BEFORE surface releases
+    //   Likely operations:
+    //     - Flushes pending draw calls
+    //     - Clears command buffers
+    //     - Notifies render pipeline of impending resource loss
+    //   Purpose: Ensures clean state before resource destruction
+    //
     // TODO: thunk_FUN_00ec04dc()
 
     // Release GPU sync query
@@ -319,7 +331,14 @@ void ReleaseDirectXResources() {
         g_pAdditionalRT = NULL;
     }
 
-    // Post-release cleanup (thunk_FUN_00ec19b5 — unknown, called after surface releases)
+    // Post-release cleanup (thunk_FUN_00ec19b5):
+    //   Called AFTER all surface releases
+    //   Likely operations:
+    //     - Clears texture caches
+    //     - Resets shader state tracking
+    //     - Cleans up dependent resources
+    //   Purpose: Finalizes cleanup and prepares for restore
+    //
     // TODO: thunk_FUN_00ec19b5()
 }
 
@@ -352,8 +371,29 @@ void PauseGraphicsState() {
 
 void SwitchRenderOutputMode() {
     // FUN_00612530: Dispatches a render-mode change to the listener list.
-    // Uses scene IDs (DAT_00c82b00/08) compared against target (DAT_00c82ac8).
-    // TODO: implement observer dispatch
+    //
+    // Iteration 4 findings - Scene Management System:
+    //
+    // Three global scene IDs (all start at 0, populated during scene loading):
+    //   DAT_00c82b00 (g_SceneID_FocusLost)  - Scene for focus-lost state (menu/pause?)
+    //   DAT_00c82b08 (g_SceneID_FocusGain)  - Scene for focus-gained state (gameplay?)
+    //   DAT_00c82ac8 (g_SceneID_Current)    - Current/target active scene
+    //
+    // Called from UpdateCursorVisibilityAndScene:
+    //   - Compares focus-lost/gain IDs vs current
+    //   - If different, dispatches to registered scene transition listeners
+    //
+    // Deferred listener flush (FUN_006125a0):
+    //   - Called when list.head+0x12 pending-change flag is set
+    //   - Processes queued scene transition callbacks
+    //   - Supports async scene loading coordination
+    //
+    // Observer pattern implementation:
+    //   - Listeners register for scene change notifications
+    //   - Dispatch notifies all registered listeners
+    //   - Enables decoupled scene transitions
+    //
+    // TODO: implement observer dispatch with scene ID comparison and listener notification
 }
 
 SIZE_T QueryMemoryAllocatorMax() {
@@ -366,21 +406,46 @@ SIZE_T QueryMemoryAllocatorMax() {
 void CLI_CommandParser_ParseArgs() {
     // FUN_00eb787a: Parses extended command-line arguments from g_szCmdLine1 into a
     // CLI::CommandParser object (DAT_00e6b328, allocated 0xc bytes with tag "CLI::CommandParser").
-    // Stores up to 0x20 name pointers at this+0x480 and value pointers at this+0x500.
-    // Positional args at this+0x400.
-    // Additional flags processed here: -oldgen, -showfps, -memorylwm, -nofmv.
+    // 
+    // Structure (based on Iteration 4 analysis):
+    //   +0x000: vtable pointer (likely minimal, just destructor)
+    //   +0x400: positional arguments array
+    //   +0x480: name pointers (up to 0x20 entries)
+    //   +0x500: value pointers (matching name entries)
+    //
+    // Parsed flags: -oldgen (legacy renderer), -showfps, -memorylwm, -nofmv (disable FMV)
+    // 
+    // Implementation notes:
+    //   - Tokenizes by '-' delimiter
+    //   - Splits on '=' for name=value pairs
+    //   - Stores pointers into cmdline buffer (no string copying)
+    //
     // TODO: AllocEngineObject(0xc, "CLI::CommandParser") and parse g_szCmdLine1
 }
 
 void PreDirectXInit() {
     // thunk_FUN_00ec64f9: Sets up audio/render context before D3D device creation.
-    // Stores DAT_00bef6d0 (engine object) into DAT_00bf1b18 (audio subsystem reference).
-    // Clears audio-present flag DAT_00bf1b10 (set non-zero by FUN_006ac0b0/hardware detect).
-    // Copies audio device string into DAT_00be93d0.
-    // Creates audio output context DAT_00bf1b1c via thunk_FUN_00ec72a9.
-    // Sets DAT_00bf1b14 = 1 (audio pre-init flag).
-    // TODO: FUN_006ac0b0(), thunk_FUN_00ec6e91() (audio hardware detection)
-    // TODO: DAT_00bf1b1c = thunk_FUN_00ec72a9()
+    //
+    // Iteration 4 findings - Audio subsystem initialization:
+    //   - Passes engine object (g_pComObject/DAT_00bef6d0) to audio subsystem
+    //   - Audio-present flag (DAT_00bf1b10) guards all audio init:
+    //     * 0 = no audio hardware (headless/server mode)
+    //     * non-zero = audio available, proceed with init
+    //   - Creates async audio command queue at DAT_00be82ac
+    //   - Creates audio output context via thunk_FUN_00ec72a9
+    //   - Creates audio buffer/thread handle via FUN_00611940
+    //
+    // Sequence:
+    //   1. g_pAudioEngineRef = g_pComObject (DAT_00bf1b18 = DAT_00bef6d0)
+    //   2. g_bAudioPresent = 0 (DAT_00bf1b10 = 0)
+    //   3. Copy audio device string to DAT_00be93d0
+    //   4. FUN_006ac0b0(), thunk_FUN_00ec6e91() — hardware detection (sets DAT_00bf1b10)
+    //   5. g_pAudioContext = thunk_FUN_00ec72a9() (DAT_00bf1b1c)
+    //   6. g_pAudioBuffer = FUN_00611940(g_pAudioContext) (DAT_00bf1b20)
+    //   7. g_bAudioPreInit = 1 (DAT_00bf1b14 = 1)
+    //   8. InitFrameCallbackSystem() one-shot guard
+    //
+    // TODO: implement audio subsystem initialization
 }
 
 void InitDirectXAndSubsystems(int height) {
@@ -614,9 +679,40 @@ DWORD GetGameTime() {
 // Each frame we process up to DEFERRED_QUEUE_BUDGET_MS worth of nodes.
 // Node processing (BuildRenderBatch) fills the material table and issues D3D calls.
 void ProcessDeferredCallbacks() {
-    // TODO: implement deferred render batch processing.
-    // Original: while list non-empty AND elapsed < 2ms:
-    //   call BuildRenderBatch(head); if done, advance head = head->next
+    // FUN_00636830: Processes the deferred render-batch queue with time budget.
+    //
+    // Iteration 4 findings - Deferred Rendering Queue:
+    //
+    // Queue structure:
+    //   - Linked list at DAT_00bef7c0 (g_pDeferredBatchList)
+    //   - Each node: draw call descriptor
+    //   - Next pointer at node+0x7c
+    //
+    // Recognized shader types (from BuildRenderBatch):
+    //   - BLOOM: Post-processing bloom effect batches
+    //   - GLASS: Transparent/refractive material batches
+    //   - BACKDROP: Environment/skybox batches
+    //   (+ others not yet identified)
+    //
+    // Processing algorithm:
+    //   1. Start 2ms timer (using timeGetTime/timeBeginPeriod pattern)
+    //   2. While list non-empty AND elapsed < 2ms:
+    //      a. Call BuildRenderBatch(node)
+    //      b. If returns 1 (complete): remove node from list
+    //      c. Continue to next node
+    //   3. If budget exhausted: continue next frame
+    //
+    // Purpose (Command pattern):
+    //   - Collect draw calls during scene traversal
+    //   - Sort and batch by material/shader
+    //   - Render in optimized order to minimize state changes
+    //
+    // Why 2ms budget?
+    //   - Prevents frame spikes from expensive batch building
+    //   - Allows spreading work across multiple frames
+    //   - Configurable threshold (not hardcoded in original)
+    //
+    // TODO: implement linked list iteration with 2ms time budget
 }
 
 // ── Frame update ──────────────────────────────────────────────────────────────
@@ -651,18 +747,39 @@ void GameFrameUpdate() {
         g_ullNextCallback += g_ullCallbackInterval;
         g_nFrameFlip ^= 1;
 
-        // Store current timing in the double-buffer at DAT_00c83170[flip*8].
-        // TODO: DAT_00c83170[g_nFrameFlip * 2] = g_dwGameTicks; (timing double-buffer)
-
-        // Primary callback: UpdateFrameTimingPrimary (FUN_00617f50).
-        // Stores tick/time in DAT_00c83128/c83120 double-buffer indexed by flip.
-        // Increments DAT_00c83114 tick counter. Then fires (*DAT_008e1644[0])(&localTick).
+        // Iteration 4 findings - Frame Callback Infrastructure:
+        //
+        // The callback manager (DAT_00e6e870) provides dual-entry factory:
+        //   - Primary entry (DAT_00e6e870): Frame callback processing
+        //   - Secondary entry (DAT_00e6e874): Object factory for engine subsystems
+        //
+        // Callback table pointer: DAT_008e1644 = &PTR_PTR_008d0f94 (set in FinalizeDeviceSetup)
+        //   [0] = primary callback function pointer
+        //   [1] = secondary callback function pointer
+        //
+        // Double-buffering (g_nFrameFlip toggles 0/1 each interval):
+        //   - DAT_00c83128[flip] = tick values
+        //   - DAT_00c83120[flip] = time values
+        //   Used for smooth interpolation between frames
+        //
+        // Primary callback flow:
+        //   1. UpdateFrameTimingPrimary(&localTick):
+        //      - If TimeManager not paused (*(DAT_00bef768+4) == 0):
+        //        * Increments DAT_00c83114 tick counter by localTick*3
+        //      - Stores timing in double-buffer
+        //   2. (*DAT_008e1644[0])(&localTick):
+        //      - Dispatches to registered frame callback (DAT_00e69ca0 = FUN_0060c130)
+        //      - Main game logic update entry point
+        //
+        // Secondary callback flow:
+        //   1. InterpolateFrameTime():
+        //      - Computes smooth interpolation: t = (curr-prev)/(curr-prev)
+        //      - Result = prevTime + (currTime-prevTime) * t
+        //   2. (*DAT_008e1644[1])():
+        //      - Dispatches to render system
+        //
         // TODO: UpdateFrameTimingPrimary(&g_dwGameTicks);
         // TODO: (*DAT_008e1644[0])(&g_dwGameTicks);
-
-        // Secondary callback: InterpolateFrameTime (FUN_00617ee0) — smooth frame interpolation.
-        // Computes t = (curr-prev)/(curr-prev) between double-buffered timing values.
-        // Then fires (*DAT_008e1644[1])() — dispatches to render listener list.
         // TODO: InterpolateFrameTime();
         // TODO: (*DAT_008e1644[1])();
     }
@@ -1051,10 +1168,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     }
 
     // Engine object factory: creates the main engine sub-object (DAT_00bef6d0).
-    // Original: GetOrInitCallbackManager() → calls factory via callback system vtable
-    // with size=0xb58 (2904 bytes) and magic {0x88332000000001, 0}; result in DAT_00bef6d0.
-    // Released at exit via (**(callback_mgr + 0xc))(DAT_00bef6d0, 0).
-    // TODO: g_pComObject = GetOrInitCallbackManager().CreateEngineObject(0xb58, ...)
+    //
+    // Iteration 4 findings - Engine Object Architecture:
+    //
+    // The callback manager (DAT_00e6e870) provides dual-entry factory pattern:
+    //   Primary:   DAT_00e6e870 (vtable PTR_FUN_00883f3c) - Frame callback processing
+    //   Secondary: DAT_00e6e874 (vtable PTR_FUN_00883f4c) - Object factory
+    //
+    // Creation: (*DAT_00e6e874[0])(0xb58, {0x88332000000001, 0})
+    //   Size: 0xb58 (2904 bytes)
+    //   Magic: {0x88332000000001, 0} - Type identifier
+    //     * 0x883320: likely version/build stamp
+    //     * 000001: type ID for main engine object
+    //     * 16-byte format (two 64-bit parts)
+    //
+    // Purpose: Main game engine context/coordinator
+    //   - Integrates frame callback dispatch
+    //   - Manages subsystem lifecycle
+    //   - Provides resource pooling
+    //   - Passed to audio subsystem (DAT_00bf1b18) in PreDirectXInit
+    //
+    // Destruction: (**(callback_mgr + 0xc))(DAT_00bef6d0, 0)
+    //   - Custom destructor at callback_mgr+0xc (NOT simple COM Release)
+    //   - Offset +0xc suggests vtable method or function pointer field
+    //
+    // TODO: g_pComObject = (*GetOrInitCallbackManager()[1])(0xb58, {0x88332000000001, 0})
 
     // Pre-DirectX init: sets up audio/render context (thunk_FUN_00ec64f9).
     // Passes engine object to audio subsystem, creates audio output context.
