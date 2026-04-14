@@ -1,0 +1,216 @@
+openjdk version "21.0.10" 2026-01-20
+OpenJDK Runtime Environment (build 21.0.10+7-Ubuntu-124.04)
+OpenJDK 64-Bit Server VM (build 21.0.10+7-Ubuntu-124.04, mixed mode)
+INFO  Using log config file: jar:file:/snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/heap/.config/ghidra/ghidra_12.0_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/heap/.config/ghidra/ghidra_12.0_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (661 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (SSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (ApplicationTrustManagerFactory)  
+INFO  Headless startup complete (1313 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 58 extension points (18 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /home/heap/Documents/AgenticGhidraDecompilationHP
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/heap/Documents/AgenticGhidraDecompilationHP/./HP_Project (HeadlessAnalyzer)  
+INFO  Opening project: /home/heap/Documents/AgenticGhidraDecompilationHP/./HP_Project (HeadlessProject)  
+INFO  REPORT: Processing project file: /hp.exe (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: /hp.exe (HeadlessAnalyzer)  
+WARN  Ignoring leading '_' chars on no-return name '___raise_securityfailure' specified in file: /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn (NoReturnFunctionAnalyzer)  
+WARN  Ignoring leading '_' chars on no-return name '___report_rangecheckfailure' specified in file: /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn (NoReturnFunctionAnalyzer)  
+INFO  Skipping PDB processing: missing PDB information in program metadata (PdbUniversalAnalyzer)  
+INFO  Packed database cache: /var/tmp/heap-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: windows_vs12_32 (ApplyDataArchiveAnalyzer)  
+INFO  -----------------------------------------------------
+    ASCII Strings                              0.679 secs
+    Apply Data Archives                        0.294 secs
+    Call Convention ID                         0.029 secs
+    Call-Fixup Installer                       0.044 secs
+    Create Address Tables                      1.028 secs
+    Create Function                            0.001 secs
+    Data Reference                             1.129 secs
+    Decompiler Switch Analysis                 5.671 secs
+    Demangler Microsoft                        0.023 secs
+    Disassemble Entry Points                   0.414 secs
+    Embedded Media                             0.085 secs
+    External Entry References                  0.000 secs
+    Function ID                                3.502 secs
+    Function Start Pre Search                  0.132 secs
+    Function Start Search                      2.636 secs
+    Function Start Search After Code           0.919 secs
+    Function Start Search After Data           0.832 secs
+    Non-Returning Functions - Discovered       3.003 secs
+    Non-Returning Functions - Known            0.071 secs
+    PDB Universal                              0.002 secs
+    Reference                                  1.175 secs
+    Scalar Operand References                  2.695 secs
+    Shared Return Calls                        1.204 secs
+    Stack                                      3.486 secs
+    Subroutine References                      1.072 secs
+    Subroutine References - One Time           0.000 secs
+    Windows x86 PE Exception Handling          0.049 secs
+    Windows x86 PE RTTI Analyzer               0.001 secs
+    Windows x86 Thread Environment Block (TEB) Analyzer     0.000 secs
+    WindowsResourceReference                   0.326 secs
+    X86 Function Callee Purge                  0.063 secs
+    x86 Constant Reference Analyzer           13.081 secs
+-----------------------------------------------------
+     Total Time   43 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: /hp.exe (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: DecompileFunction.java '0060ce60'  (HeadlessAnalyzer)  
+INFO  SCRIPT: /home/heap/Documents/AgenticGhidraDecompilationHP/DecompileFunction.java (HeadlessAnalyzer)  
+INFO  DecompileFunction.java> 
+undefined4
+FUN_0060ce60(basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *param_1,
+            int param_2,undefined4 param_3)
+
+{
+  undefined4 uVar1;
+  int in_EAX;
+  char *pcVar2;
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *pbVar3;
+  LSTATUS LVar4;
+  LPCSTR **pppCVar5;
+  int iVar6;
+  HKEY pHStack_d8;
+  undefined4 uStack_d4;
+  DWORD DStack_d0;
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> local_cc [4];
+  LPCSTR *appCStack_c8 [5];
+  uint uStack_b4;
+  undefined **ppuStack_b0;
+  char *pcStack_ac;
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_a8 [28];
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_8c [28];
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> local_70 [28];
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_54 [28];
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_38 [28];
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_1c [28];
+  
+  if (*(int *)(in_EAX + 0x14) == 0) {
+    pcVar2 = (char *)std::operator+<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                               ((char *)local_70,
+                                (basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                                 *)"\'; entry \'");
+    std::operator+<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+              (abStack_8c,pcVar2);
+    pbVar3 = (basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+             std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+             basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                       (abStack_1c,"Bad registry location - section \'");
+    pbVar3 = (basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+             std::operator+<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                       (abStack_54,pbVar3);
+    pbVar3 = (basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+             std::operator+<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                       (abStack_38,pbVar3);
+    pcStack_ac = "unknown";
+    ppuStack_b0 = &PTR_FUN_008838e4;
+    std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+    basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_a8,pbVar3);
+    ppuStack_b0 = &PTR_FUN_008838e4;
+                    /* WARNING: Subroutine does not return */
+    _CxxThrowException(&ppuStack_b0,(ThrowInfo *)&DAT_00893e18);
+  }
+  std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+            (local_cc,"Software\\Electronic Arts\\");
+  std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::operator+=
+            (local_cc,param_1);
+  if (*(int *)(param_2 + 0x14) != 0) {
+    pbVar3 = (basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+             std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+             basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                       (local_70,"\\");
+    pbVar3 = (basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+             std::operator+<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                       (abStack_8c,pbVar3);
+    std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::operator+=
+              (local_cc,pbVar3);
+    std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+    ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_8c);
+    std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+    ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(local_70);
+  }
+  uStack_d4 = param_3;
+  pHStack_d8 = (HKEY)0x0;
+  pppCVar5 = (LPCSTR **)appCStack_c8[0];
+  if (uStack_b4 < 0x10) {
+    pppCVar5 = appCStack_c8;
+  }
+  LVar4 = RegOpenKeyExA((HKEY)&DAT_80000001,(LPCSTR)pppCVar5,0,0x20019,&pHStack_d8);
+  if (LVar4 == 0) {
+    if (*(uint *)(in_EAX + 0x18) < 0x10) {
+      iVar6 = in_EAX + 4;
+    }
+    else {
+      iVar6 = *(int *)(in_EAX + 4);
+    }
+    thunk_FUN_00eb49e8(pHStack_d8,iVar6);
+  }
+  else {
+    pppCVar5 = (LPCSTR **)appCStack_c8[0];
+    if (uStack_b4 < 0x10) {
+      pppCVar5 = appCStack_c8;
+    }
+    LVar4 = RegOpenKeyExA((HKEY)&DAT_80000002,(LPCSTR)pppCVar5,0,0x20019,&pHStack_d8);
+    if (LVar4 == 0) {
+      if (*(uint *)(in_EAX + 0x18) < 0x10) {
+        iVar6 = in_EAX + 4;
+      }
+      else {
+        iVar6 = *(int *)(in_EAX + 4);
+      }
+      thunk_FUN_00eb49e8(pHStack_d8,iVar6);
+      FUN_0060cc70(param_1,uStack_d4);
+    }
+    else {
+      DStack_d0 = 0;
+      if (uStack_b4 < 0x10) {
+        appCStack_c8[0] = (LPCSTR *)appCStack_c8;
+      }
+      RegCreateKeyExA((HKEY)&DAT_80000001,(LPCSTR)appCStack_c8[0],0,"",0,0x1f,
+                      (LPSECURITY_ATTRIBUTES)0x0,&pHStack_d8,&DStack_d0);
+    }
+  }
+  if (pHStack_d8 != (HKEY)0x0) {
+    RegCloseKey(pHStack_d8);
+  }
+  uVar1 = uStack_d4;
+  std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+  ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(local_cc);
+  return uVar1;
+}
+
+ (GhidraScript)  
+INFO  ANALYZING changes made by post scripts: /hp.exe (HeadlessAnalyzer)  
+INFO  REPORT: Post-analysis succeeded for file: /hp.exe (HeadlessAnalyzer)  
+INFO  REPORT: Save succeeded for processed file: /hp.exe (HeadlessAnalyzer)  

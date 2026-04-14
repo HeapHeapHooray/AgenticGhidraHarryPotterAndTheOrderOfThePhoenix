@@ -1,0 +1,138 @@
+openjdk version "21.0.10" 2026-01-20
+OpenJDK Runtime Environment (build 21.0.10+7-Ubuntu-124.04)
+OpenJDK 64-Bit Server VM (build 21.0.10+7-Ubuntu-124.04, mixed mode)
+INFO  Using log config file: jar:file:/snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/heap/.config/ghidra/ghidra_12.0_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/heap/.config/ghidra/ghidra_12.0_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (649 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (SSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (ApplicationTrustManagerFactory)  
+INFO  Headless startup complete (1275 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 58 extension points (18 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /home/heap/Documents/AgenticGhidraDecompilationHP
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/heap/Documents/AgenticGhidraDecompilationHP/./HP_Project (HeadlessAnalyzer)  
+INFO  Opening project: /home/heap/Documents/AgenticGhidraDecompilationHP/./HP_Project (HeadlessProject)  
+INFO  REPORT: Processing project file: /hp.exe (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: /hp.exe (HeadlessAnalyzer)  
+WARN  Ignoring leading '_' chars on no-return name '___raise_securityfailure' specified in file: /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn (NoReturnFunctionAnalyzer)  
+WARN  Ignoring leading '_' chars on no-return name '___report_rangecheckfailure' specified in file: /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn (NoReturnFunctionAnalyzer)  
+INFO  Skipping PDB processing: missing PDB information in program metadata (PdbUniversalAnalyzer)  
+INFO  Packed database cache: /var/tmp/heap-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: windows_vs12_32 (ApplyDataArchiveAnalyzer)  
+INFO  -----------------------------------------------------
+    ASCII Strings                              0.658 secs
+    Apply Data Archives                        0.382 secs
+    Call Convention ID                         0.089 secs
+    Call-Fixup Installer                       0.043 secs
+    Create Address Tables                      1.042 secs
+    Create Function                            0.000 secs
+    Data Reference                             1.038 secs
+    Decompiler Switch Analysis                 5.581 secs
+    Demangler Microsoft                        0.023 secs
+    Disassemble Entry Points                   0.533 secs
+    Embedded Media                             0.087 secs
+    External Entry References                  0.000 secs
+    Function ID                                3.804 secs
+    Function Start Pre Search                  0.103 secs
+    Function Start Search                      2.581 secs
+    Function Start Search After Code           0.913 secs
+    Function Start Search After Data           0.903 secs
+    Non-Returning Functions - Discovered       3.076 secs
+    Non-Returning Functions - Known            0.075 secs
+    PDB Universal                              0.002 secs
+    Reference                                  1.248 secs
+    Scalar Operand References                  2.612 secs
+    Shared Return Calls                        1.213 secs
+    Stack                                      3.771 secs
+    Subroutine References                      1.089 secs
+    Subroutine References - One Time           0.001 secs
+    Windows x86 PE Exception Handling          0.061 secs
+    Windows x86 PE RTTI Analyzer               0.000 secs
+    Windows x86 Thread Environment Block (TEB) Analyzer     0.000 secs
+    WindowsResourceReference                   0.323 secs
+    X86 Function Callee Purge                  0.077 secs
+    x86 Constant Reference Analyzer           12.716 secs
+-----------------------------------------------------
+     Total Time   44 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: /hp.exe (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: DecompileFunction.java '0060deb0'  (HeadlessAnalyzer)  
+INFO  SCRIPT: /home/heap/Documents/AgenticGhidraDecompilationHP/DecompileFunction.java (HeadlessAnalyzer)  
+INFO  DecompileFunction.java> 
+void FUN_0060deb0(char param_1)
+
+{
+  undefined4 local_30;
+  uint local_2c;
+  undefined4 local_28;
+  uint local_24;
+  undefined4 local_20;
+  uint local_1c;
+  undefined4 local_18;
+  undefined4 local_14;
+  undefined4 local_10;
+  undefined4 local_c;
+  
+  if (param_1 != '\0') {
+    SystemParametersInfoA(0x3b,8,&DAT_008afc44,0);
+    SystemParametersInfoA(0x35,8,&DAT_008afc4c,0);
+    SystemParametersInfoA(0x33,0x18,&DAT_008afc54,0);
+    return;
+  }
+  local_30 = DAT_008afc44;
+  local_2c = DAT_008afc48;
+  if ((DAT_008afc48 & 1) == 0) {
+    local_2c = DAT_008afc48 & 0xfffffff3;
+    SystemParametersInfoA(0x3b,8,&local_30,0);
+  }
+  local_28 = DAT_008afc4c;
+  local_24 = DAT_008afc50;
+  if ((DAT_008afc50 & 1) == 0) {
+    local_24 = DAT_008afc50 & 0xfffffff3;
+    SystemParametersInfoA(0x35,8,&local_28,0);
+  }
+  local_20 = DAT_008afc54;
+  local_18 = DAT_008afc5c;
+  local_14 = DAT_008afc60;
+  local_10 = DAT_008afc64;
+  local_c = DAT_008afc68;
+  if ((DAT_008afc58 & 1) == 0) {
+    local_1c = DAT_008afc58 & 0xfffffff3;
+    SystemParametersInfoA(0x33,0x18,&local_20,0);
+  }
+  return;
+}
+
+ (GhidraScript)  
+INFO  ANALYZING changes made by post scripts: /hp.exe (HeadlessAnalyzer)  
+INFO  REPORT: Post-analysis succeeded for file: /hp.exe (HeadlessAnalyzer)  
+INFO  REPORT: Save succeeded for processed file: /hp.exe (HeadlessAnalyzer)  

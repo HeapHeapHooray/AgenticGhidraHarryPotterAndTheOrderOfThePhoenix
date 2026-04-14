@@ -1,0 +1,873 @@
+openjdk version "21.0.10" 2026-01-20
+OpenJDK Runtime Environment (build 21.0.10+7-Ubuntu-124.04)
+OpenJDK 64-Bit Server VM (build 21.0.10+7-Ubuntu-124.04, mixed mode)
+INFO  Using log config file: jar:file:/snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/heap/.config/ghidra/ghidra_12.0_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/heap/.config/ghidra/ghidra_12.0_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (653 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (SSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (ApplicationTrustManagerFactory)  
+INFO  Headless startup complete (1279 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 58 extension points (18 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /home/heap/Documents/AgenticGhidraDecompilationHP
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/heap/Documents/AgenticGhidraDecompilationHP/./HP_Project (HeadlessAnalyzer)  
+INFO  Opening project: /home/heap/Documents/AgenticGhidraDecompilationHP/./HP_Project (HeadlessProject)  
+INFO  REPORT: Processing project file: /hp.exe (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: /hp.exe (HeadlessAnalyzer)  
+WARN  Ignoring leading '_' chars on no-return name '___raise_securityfailure' specified in file: /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn (NoReturnFunctionAnalyzer)  
+WARN  Ignoring leading '_' chars on no-return name '___report_rangecheckfailure' specified in file: /snap/ghidra/35/ghidra_12.0_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn (NoReturnFunctionAnalyzer)  
+INFO  Skipping PDB processing: missing PDB information in program metadata (PdbUniversalAnalyzer)  
+INFO  Packed database cache: /var/tmp/heap-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: windows_vs12_32 (ApplyDataArchiveAnalyzer)  
+INFO  -----------------------------------------------------
+    ASCII Strings                              0.690 secs
+    Apply Data Archives                        0.343 secs
+    Call Convention ID                         0.091 secs
+    Call-Fixup Installer                       0.062 secs
+    Create Address Tables                      1.027 secs
+    Create Function                            0.001 secs
+    Data Reference                             1.141 secs
+    Decompiler Switch Analysis                 5.686 secs
+    Demangler Microsoft                        0.023 secs
+    Disassemble Entry Points                   0.490 secs
+    Embedded Media                             0.108 secs
+    External Entry References                  0.000 secs
+    Function ID                                3.844 secs
+    Function Start Pre Search                  0.119 secs
+    Function Start Search                      2.672 secs
+    Function Start Search After Code           0.975 secs
+    Function Start Search After Data           0.860 secs
+    Non-Returning Functions - Discovered       2.789 secs
+    Non-Returning Functions - Known            0.064 secs
+    PDB Universal                              0.001 secs
+    Reference                                  1.268 secs
+    Scalar Operand References                  2.661 secs
+    Shared Return Calls                        1.123 secs
+    Stack                                      3.344 secs
+    Subroutine References                      1.061 secs
+    Subroutine References - One Time           0.000 secs
+    Windows x86 PE Exception Handling          0.052 secs
+    Windows x86 PE RTTI Analyzer               0.000 secs
+    Windows x86 Thread Environment Block (TEB) Analyzer     0.000 secs
+    WindowsResourceReference                   0.328 secs
+    X86 Function Callee Purge                  0.079 secs
+    x86 Constant Reference Analyzer           13.175 secs
+-----------------------------------------------------
+     Total Time   44 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: /hp.exe (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: DecompileFunction.java '0060dfa0'  (HeadlessAnalyzer)  
+INFO  SCRIPT: /home/heap/Documents/AgenticGhidraDecompilationHP/DecompileFunction.java (HeadlessAnalyzer)  
+INFO  DecompileFunction.java> 
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+undefined4 FUN_0060dfa0(undefined4 param_1,undefined4 param_2,char *param_3,int param_4)
+
+{
+  float fVar1;
+  char cVar2;
+  bool bVar3;
+  bool bVar4;
+  HWND pHVar5;
+  HANDLE pvVar6;
+  undefined4 uVar7;
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *pbVar8;
+  int *piVar9;
+  BOOL BVar10;
+  undefined4 extraout_ECX;
+  undefined4 extraout_ECX_00;
+  code *pcVar11;
+  int iVar12;
+  undefined2 in_FPUControlWord;
+  UINT UVar13;
+  char *pcVar14;
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_130 [28];
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_114 [28];
+  tagRECT tStack_f8;
+  char *pcStack_dc;
+  int iStack_d8;
+  undefined4 uStack_d4;
+  ulonglong uStack_d0;
+  undefined4 uStack_c8;
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_c0 [28];
+  undefined4 uStack_a4;
+  undefined4 uStack_a0;
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_9c [28];
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_80 [28];
+  basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> abStack_64 [28];
+  char acStack_48 [68];
+  
+  _control87(0x20000,0x30000);
+  pcVar11 = SystemParametersInfoA_exref;
+  SystemParametersInfoA(0x3a,8,&DAT_008afc44,0);
+  SystemParametersInfoA(0x34,8,&DAT_008afc4c,0);
+  SystemParametersInfoA(0x32,0x18,&DAT_008afc54,0);
+  FUN_0060deb0(0);
+  strncpy(&DAT_00c82b88,param_3,0x1ff);
+  strncpy(&DAT_00c82d88,param_3,0x1ff);
+  DAT_00c82d87 = 0;
+  thunk_FUN_00eb787a();
+  iVar12 = 0;
+  uStack_a4 = 0;
+  pHVar5 = FindWindowA("OrderOfThePhoenixMainWndClass",(LPCSTR)0x0);
+  if (pHVar5 == (HWND)0x0) {
+    cVar2 = thunk_FUN_00eb4b95();
+    if (cVar2 != '\0') {
+      uStack_d0 = uStack_d0 & 0xffffffff00000000;
+      uStack_a0 = 0;
+      iStack_d8 = 0x280;
+      uStack_d4 = 0x1e0;
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Width");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1940 = FUN_0060ce60(&tStack_f8,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      if (DAT_00bf1940 != 0) {
+        DAT_008afbd9 = '\x01';
+      }
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"BitDepth");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1944 = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"ShadowLOD");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1948 = FUN_0060ce60(abStack_130,abStack_114,6);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"MaxFarClip");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1954 = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"ParticleRate");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1958 = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"ParticleCullDistance");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1960 = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"CullDistance");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf195c = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"DisableFog");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1964 = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"DisablePostPro");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1968 = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"FilterFlip");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf196c = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"AAMode");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1970 = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"UseAdditionalModes");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1974 = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      do {
+        sprintf(acStack_48,"Mode%dWidth",iVar12);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8,acStack_48);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_114,"GameSettings");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_130,"Harry Potter and the Order of the Phoenix");
+        uVar7 = FUN_0060ce60(abStack_130,abStack_114,0);
+        (&DAT_009a78a0)[iVar12] = uVar7;
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8);
+        sprintf(acStack_48,"Mode%dHeight",iVar12);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8,acStack_48);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_114,"GameSettings");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_130,"Harry Potter and the Order of the Phoenix");
+        uVar7 = FUN_0060ce60(abStack_130,abStack_114,0);
+        (&DAT_009e4c90)[iVar12] = uVar7;
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8);
+        iVar12 = iVar12 + 1;
+      } while (iVar12 < 6);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"OptionResolution");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf197c = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"OptionLOD");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_008ae1ec = FUN_0060ce60(abStack_130,abStack_114,1);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"OptionBrightness");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_008ae1f0 = FUN_0060ce60(abStack_130,abStack_114,5);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      cVar2 = FUN_00617bf0(&DAT_00c82b88,"fullscreen",0);
+      if (cVar2 != '\0') {
+        DAT_008afbd9 = '\x01';
+      }
+      pcStack_dc = (char *)0x0;
+      FUN_00617bf0(&DAT_00c82b88,"fullscreen",&pcStack_dc);
+      if (pcStack_dc != (char *)0x0) {
+        DAT_00bf1940 = atoi(pcStack_dc);
+        DAT_008afbd9 = '\x01';
+      }
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"MaxTextureSize");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf194c = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8,"MaxShadowTextureSize");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_114,"GameSettings");
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                (abStack_130,"Harry Potter and the Order of the Phoenix");
+      DAT_00bf1950 = FUN_0060ce60(abStack_130,abStack_114,0);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+      std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+      ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 &tStack_f8);
+      cVar2 = FUN_00617bf0(&DAT_00c82b88,"widescreen",0);
+      DAT_008ae1dc = DAT_007d52fc;
+      if (cVar2 != '\0') {
+        DAT_008ae1dc = DAT_008b6a84;
+      }
+      bVar4 = false;
+      pcStack_dc = (char *)((uint)pcStack_dc & 0xffffff00);
+      if (DAT_008afbd9 == '\0') {
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_c0,"300");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8,"PosX");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_114,"GameSettings");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_130,"Harry Potter and the Order of the Phoenix");
+        FUN_0060ca20(abStack_9c,abStack_130,abStack_114,abStack_c0);
+        thunk_FUN_00eb4a20();
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_9c);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_c0);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8,"32");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_114,"PosY");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_130,"GameSettings");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_c0,"Harry Potter and the Order of the Phoenix");
+        FUN_0060ca20(abStack_9c,abStack_c0,abStack_130,&tStack_f8);
+        uStack_a0 = thunk_FUN_00eb4a20();
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_9c);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_c0);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8);
+        if (DAT_00bf1940 == 0) {
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                    ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *
+                     )&tStack_f8,"640");
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                    (abStack_114,"SizeX");
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                    (abStack_130,"GameSettings");
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                    (abStack_c0,"Harry Potter and the Order of the Phoenix");
+          FUN_0060ca20(abStack_9c,abStack_c0,abStack_130,&tStack_f8);
+          iStack_d8 = thunk_FUN_00eb4a20();
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_9c);
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_c0);
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130)
+          ;
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114)
+          ;
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                    ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *
+                     )&tStack_f8);
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                    ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *
+                     )&tStack_f8,"480");
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                    (abStack_114,"SizeY");
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                    (abStack_130,"GameSettings");
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                    (abStack_c0,"Harry Potter and the Order of the Phoenix");
+          FUN_0060ca20(abStack_9c,abStack_c0,abStack_130,&tStack_f8);
+          uStack_d4 = thunk_FUN_00eb4a20();
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_9c);
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_c0);
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130)
+          ;
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114)
+          ;
+          std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+          ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                    ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *
+                     )&tStack_f8);
+        }
+        else {
+          fVar1 = (float)DAT_00bf1940;
+          iStack_d8 = DAT_00bf1940;
+          if (DAT_00bf1940 < 0) {
+            fVar1 = fVar1 + _DAT_0088e7e0;
+          }
+          pcStack_dc = (char *)CONCAT22(pcStack_dc._2_2_,in_FPUControlWord);
+          uStack_d0 = (ulonglong)ROUND(fVar1 / DAT_008ae1dc);
+          uStack_d4 = (undefined4)uStack_d0;
+        }
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8,"false");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_114,"Maximized");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_130,"GameSettings");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_c0,"Harry Potter and the Order of the Phoenix");
+        pcVar14 = "true";
+        pbVar8 = (basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 FUN_0060ca20(abStack_9c,abStack_c0,abStack_130,&tStack_f8,extraout_ECX);
+        bVar4 = std::operator==<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (pbVar8,pcVar14);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_9c);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_c0);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8,"false");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_114,"Minimized");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_130,"GameSettings");
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  (abStack_c0,"Harry Potter and the Order of the Phoenix");
+        pcVar14 = "true";
+        pbVar8 = (basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                 FUN_0060ca20(abStack_9c,abStack_c0,abStack_130,&tStack_f8,extraout_ECX_00);
+        bVar3 = std::operator==<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (pbVar8,pcVar14);
+        pcStack_dc = (char *)CONCAT31(pcStack_dc._1_3_,bVar3);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_9c);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_c0);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_130);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>(abStack_114);
+        std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+        ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                  ((basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_> *)
+                   &tStack_f8);
+      }
+      else {
+        DAT_00bf192c = 1;
+      }
+      DAT_00bef6cc = (HWND)FUN_0060db20(param_1,iStack_d8,uStack_d4);
+      pcVar11 = SystemParametersInfoA_exref;
+      if (DAT_00bef6cc != (HWND)0x0) {
+        GetClientRect(DAT_00bef6cc,&tStack_f8);
+        iVar12 = thunk_FUN_00eb5c3e();
+        uStack_d0 = 0x88332000000001;
+        uStack_c8 = 0;
+        DAT_00bef6d0 = (*(code *)**(undefined4 **)(iVar12 + 4))(0xb58,&uStack_d0);
+        thunk_FUN_00ec64f9();
+        iVar12 = thunk_FUN_00eb612e(tStack_f8.bottom - tStack_f8.top);
+        pcVar11 = SystemParametersInfoA_exref;
+        if (iVar12 != 0) {
+          thunk_FUN_00eb496e();
+          DAT_00bef6c6 = 1;
+          if (DAT_008afbd9 == '\0') {
+            if (bVar4 == false) {
+              if ((char)pcStack_dc == '\0') {
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_80,"false");
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_114,"Maximized");
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_130,"GameSettings");
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_c0,"Harry Potter and the Order of the Phoenix");
+                FUN_0060ca20(abStack_9c,abStack_c0,abStack_130,abStack_80);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_c0);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_130);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_114);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_80);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_114,"false");
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_130,"Minimized");
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_c0,"GameSettings");
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_80,"Harry Potter and the Order of the Phoenix");
+                FUN_0060ca20(abStack_64,abStack_80,abStack_c0,abStack_114);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_80);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_c0);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_130);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_114);
+                bVar4 = std::
+                        operator==<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                                  (abStack_9c,"true");
+                if (bVar4) {
+                  param_4 = 3;
+                }
+                else {
+                  bVar4 = std::
+                          operator==<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                                    (abStack_64,"true");
+                  if (bVar4) {
+                    param_4 = 6;
+                  }
+                }
+                ShowWindow(DAT_00bef6cc,param_4);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_64);
+                std::basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>::
+                ~basic_string<char,struct_std::char_traits<char>,class_std::allocator<char>_>
+                          (abStack_9c);
+              }
+              else {
+                ShowWindow(DAT_00bef6cc,6);
+              }
+            }
+            else {
+              ShowWindow(DAT_00bef6cc,3);
+            }
+          }
+          UpdateWindow(DAT_00bef6cc);
+          uStack_a4 = FUN_0060dc10();
+          thunk_FUN_00ec6610();
+          if (DAT_00bef6d0 != 0) {
+            piVar9 = (int *)thunk_FUN_00eb5c3e();
+            (**(code **)(*piVar9 + 0xc))(DAT_00bef6d0,0);
+          }
+          thunk_FUN_00eb4a5d();
+          if ((DAT_00e6b384 != 0) && (*(int *)(DAT_00e6b384 + 0xc) != 0)) {
+            iVar12 = (**(code **)(**(int **)(DAT_00e6b384 + 0xc) + 0x10))();
+            piVar9 = *(int **)(iVar12 + 0x218);
+            if (piVar9 != (int *)0x0) {
+              (**(code **)(*piVar9 + 0x20))(piVar9);
+            }
+          }
+          FUN_0068dac0();
+          do {
+            iVar12 = ShowCursor(1);
+          } while (iVar12 < 1);
+          DAT_00bef6c7 = 1;
+          thunk_FUN_00ea53ca();
+          FUN_0060deb0(1);
+          UVar13 = 1;
+          pvVar6 = GetCurrentProcess();
+          TerminateProcess(pvVar6,UVar13);
+          FUN_006144b0();
+          pcVar11 = SystemParametersInfoA_exref;
+        }
+      }
+    }
+    BVar10 = IsWindow(DAT_00bef6cc);
+    if (BVar10 != 0) {
+      DestroyWindow(DAT_00bef6cc);
+      FUN_0060dc10();
+    }
+    (*pcVar11)(0x3b,8,&DAT_008afc44,0);
+    (*pcVar11)(0x35,8,&DAT_008afc4c,0);
+    (*pcVar11)(0x33,0x18,&DAT_008afc54,0);
+    return uStack_d4;
+  }
+  UVar13 = 0;
+  pvVar6 = GetCurrentProcess();
+  TerminateProcess(pvVar6,UVar13);
+  return 0;
+}
+
+ (GhidraScript)  
+INFO  ANALYZING changes made by post scripts: /hp.exe (HeadlessAnalyzer)  
+INFO  REPORT: Post-analysis succeeded for file: /hp.exe (HeadlessAnalyzer)  
+INFO  REPORT: Save succeeded for processed file: /hp.exe (HeadlessAnalyzer)  

@@ -1,0 +1,17 @@
+This is a project to decompiled the PC video game "Harry Potter and The Order of the Phoenix", the program is "hp.exe", a Ghidra project for it sits in this same folder.
+
+
+NOTE: temporary files go into the ./workspace folder, Ghidra scripts go in ./scripts.
+
+The current directory is a git repository, you are supposed to go through the following steps, making a commit after each one:
+
+1. Read all the comments in the Ghidra disassembly and review the disassembly for documentation gaps, commentis as necessary, making sure the comments you add fully reflect the functionality of the code. If new comments aren't needed, don't add them. If needed, look at the compiled ".exe" for more information.
+2. Describe the architecture of how the program being decompiled works, here in ARCHITECTURE.md.
+3. Ask questions about ARCHITECTURE.md in QUESTIONS.md
+4. Repeat 1-3 with QUESTIONS.md in mind, QUESTIONS.md leads to re-exploring the disassembly discovering more about the code, documenting more by filling the gaps and making a more detailed ARCHITECTURE.md. Do it till you think it's good enough to a new phase of C++ code writing (there will be multiple of them through the process of decompilation).
+5. Write C++ code in a folder called "decompilation-src", it should be structured like proper C++ code, without asm instructions, hard-coded addresses, jumps, or dereferencing constants as pointers.
+6. Compile it for the original platform using zig (it should  be able to handle basic Direct3D).
+7. Analyze the C++ code you wrote and describe the architecture of how the C++ code works in CPP-ARCHITECTURE.md (CPP-ARCHITECTURE.md needs to be cleaned/erased before you start describing !).
+8. Analyze how CPP-ARCHITECTURE.md and ARCHITECTURE.md are different, and note the differences in DIFFERENCES.md (DIFFERENCES.md needs to always be cleaned/erased before noting !), remember, full decompilation means you will have a functionally equivalent code at the end.
+9. Modify the C++ code with DIFFERENCES.md in mind, trying to get a closer representation of the original program. Do it till you think it's good enough to repeat the whole process again.
+10. Repeat step 1 through 9.
