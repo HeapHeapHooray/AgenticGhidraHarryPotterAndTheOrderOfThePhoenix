@@ -13,4 +13,8 @@ HWND ghWnd = NULL;
 bool bIsFullscreen = false;
 int gWidth = 800;
 int gHeight = 600;
-// ... more to be added as identified
+void* g_pd3dDevice = NULL; // Placeholder for IDirect3DDevice9*
+
+// Additional function prototypes
+void DirectX_UpdateDevice();
+void UpdateSystemParameters(bool reset);

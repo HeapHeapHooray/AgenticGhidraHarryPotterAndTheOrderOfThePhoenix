@@ -12,9 +12,7 @@ void LoadGameSettings() {
 
 int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd) {
     // Original code modifies some system parameters
-    SystemParametersInfoA(0x3a, 8, NULL, 0); // SPI_SETMOUSESPEED?
-    SystemParametersInfoA(0x34, 8, NULL, 0);
-    SystemParametersInfoA(0x32, 0x18, NULL, 0);
+    UpdateSystemParameters(false);
 
     // Single instance check
     if (FindWindowA("OrderOfThePhoenixMainWndClass", NULL)) {
@@ -37,42 +35,29 @@ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int n
 
     MainLoop();
 
+    UpdateSystemParameters(true);
+
     return 0;
 }
 
-BOOL RegisterWindowClass(HINSTANCE hInstance) {
-    WNDCLASSA wc = {0};
-    wc.lpfnWndProc = WindowProc;
-    wc.hInstance = hInstance;
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.lpszClassName = "OrderOfThePhoenixMainWndClass";
-    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-    wc.style = CS_DBLCLKS | CS_OWNDC | CS_VREDRAW | CS_HREDRAW;
-
-    return RegisterClassA(&wc) != 0;
+void UpdateSystemParameters(bool reset) {
+    if (!reset) {
+        SystemParametersInfoA(0x3a, 8, NULL, 0); 
+        SystemParametersInfoA(0x34, 8, NULL, 0);
+        SystemParametersInfoA(0x32, 0x18, NULL, 0);
+    } else {
+        // Restore parameters
+        // ... (as seen in FUN_0060deb0)
+    }
 }
 
-HWND CreateGameWindow(HINSTANCE hInstance, int width, int height) {
-    RECT rect = {0, 0, width, height};
-    DWORD dwStyle = bIsFullscreen ? WS_POPUP : WS_OVERLAPPEDWINDOW;
-    AdjustWindowRectEx(&rect, dwStyle, FALSE, 0);
-
-    HWND hWnd = CreateWindowExA(
-        0,
-        "OrderOfThePhoenixMainWndClass",
-        "Harry Potter and the Order of the Phoenix",
-        dwStyle,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        rect.right - rect.left, rect.bottom - rect.top,
-        NULL, NULL, hInstance, NULL
-    );
-
-    return hWnd;
-}
+// ... existing RegisterWindowClass and CreateGameWindow ...
 
 void MainLoop() {
     MSG msg;
     while (true) {
+        DirectX_UpdateDevice();
+
         if (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) {
                 break;
@@ -81,10 +66,15 @@ void MainLoop() {
             DispatchMessageA(&msg);
         } else {
             // Game update logic would go here
-            // FUN_0067d310();
-            Sleep(1); // Prevent 100% CPU in mock
+            // ...
+            Sleep(1); 
         }
     }
+}
+
+void DirectX_UpdateDevice() {
+    if (g_pd3dDevice == NULL) return;
+    // Logic from FUN_0067d310
 }
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
