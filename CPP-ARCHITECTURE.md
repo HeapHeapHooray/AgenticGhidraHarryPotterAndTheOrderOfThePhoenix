@@ -32,6 +32,8 @@ The C++ implementation in `decompilation-src/main.cpp` is a reconstruction of th
 | `g_pCachedRT` | `IDirect3DSurface9*` | Last-set render target (avoids redundant calls) |
 | `g_pCachedDS` | `IDirect3DSurface9*` | Last-set depth-stencil (avoids redundant calls) |
 | `g_pGPUSyncQuery` | `IUnknown*` | D3DQUERYTYPE_EVENT GPU sync query |
+| `g_d3dpp` | `D3DPRESENT_PARAMETERS` | Saved present parameters for device Reset |
+| `g_pComObject` | `IUnknown*` | Engine factory object (DAT_00bef6d0); released via callback manager |
 
 ### DirectInput Devices
 | Variable | Type | Purpose |
@@ -65,6 +67,7 @@ The C++ implementation in `decompilation-src/main.cpp` is a reconstruction of th
 | `g_dwDelayedOpTimer` | Countdown (ms) before resuming paused systems |
 | `g_nPauseState` | Current game-object pause state (0–7) |
 | `g_nMinFreeMemory` | Low-water mark of free memory across frames |
+| `g_bSubsysInitialized` | Set to true after `InitGameSubsystems` completes |
 
 ### Structured State
 - `g_savedParams` (`SystemParams`): saved mouse speed/accel/screen reader settings (2+2+6 UINT arrays)
@@ -76,13 +79,14 @@ The C++ implementation in `decompilation-src/main.cpp` is a reconstruction of th
 ### `ReadRegistrySetting` (int values)
 1. Try `HKEY_CURRENT_USER\Software\Electronic Arts\<app>\<section>`
 2. Try `HKEY_LOCAL_MACHINE\...\<section>`
-3. If not found anywhere: create key in HKCU with default, return default
+3. If found in HKLM: write value back to HKCU for faster future reads
+4. If not found anywhere: create key in HKCU with default, return default
 - Returns `int`; uses `RegQueryValueExA` with `REG_DWORD`
 
 ### `WriteRegistrySetting` (string values)
 - Creates `HKCU` path with `RegCreateKeyExA`
 - Writes with `RegSetValueExA` as `REG_SZ`
-- Used exclusively for window placement persistence
+- Used for window placement persistence and exit-time option saves
 
 ### `ReadRegistrySettingStr` (string values)
 - Same HKCU → HKLM fallback as above
@@ -103,6 +107,12 @@ Saves window state on `WM_CLOSE` in windowed mode:
 - Queries `GetWindowPlacement` and adjusts rect by `AdjustWindowRect` border offsets
 - Writes `PosX`, `PosY`, `SizeX`, `SizeY`, `Maximized`, `Minimized` as strings
 
+### `SaveOptionsOnExit` (stub)
+- Writes OptionResolution, OptionLOD, OptionBrightness back to registry on exit
+- Called in WinMain cleanup after render/audio teardown
+- Original: `thunk_FUN_00eb4a5d` — uses integer WriteRegistrySetting helper `FUN_0060cc70`
+- Current implementation: empty stub with TODO comments
+
 ## System Parameter Management
 
 ### `SaveOrRestoreSystemParameters(bool restore)`
@@ -118,6 +128,11 @@ Saves window state on `WM_CLOSE` in windowed mode:
 - If `valueOut != NULL` and `=` follows the flag, returns pointer to value token
 - Called for `fullscreen` (sets `bIsFullscreen`, optionally reads width) and `widescreen` (sets aspect ratio to 16:9)
 
+### CLI_CommandParser_ParseArgs (TODO stub)
+- `FUN_00eb787a`: parses `-name=value` tokens into a CLI::CommandParser object
+- Called before the single-instance guard in WinMain
+- Currently represented as a TODO comment — not yet implemented in C++
+
 ## Window Management
 
 ### `RegisterWindowClass`
@@ -126,7 +141,7 @@ Saves window state on `WM_CLOSE` in windowed mode:
 - Style: `CS_DBLCLKS | CS_OWNDC | CS_VREDRAW | CS_HREDRAW`
 - Cursor: `IDC_ARROW`, background: black brush
 
-### `CreateGameWindow(hInstance, x, y, width, height)`
+### `CreateGameWindow(hInstance, width, height)`
 **Fullscreen path:**
 - Style `WS_POPUP`, ex-style `WS_EX_TOPMOST`
 - `AdjustWindowRectEx` for borderless sizing
@@ -153,45 +168,74 @@ Message handlers:
 | `WM_WTSSESSION_CHANGE` | wParam 0 or 7 → return 1; else return -1 |
 
 **Focus loss (`WM_ACTIVATE`, `wParam==WA_INACTIVE`, fullscreen):**
-1. `UnacquireInputDevices()`
-2. `ShowCursor` loop until cursor count ≥ 1
-3. `g_bHasFocusLost = true`
-4. If `g_dwDelayedOpTimer == 0`: `PauseAudioManager()`, `PauseGameObjects(0)`; set pause flags
-5. `g_dwDelayedOpTimer = 0`
+1. `PauseGraphicsState()` — pauses input via RealInputSystem vtable (stub)
+2. `UnacquireInputDevices()`
+3. `ShowCursor` loop until cursor count ≥ 1
+4. `g_bHasFocusLost = true`
+5. TODO: `UpdateCursorVisibilityAndScene()` (cursor-visible=true) — not yet called here
+6. If `g_dwDelayedOpTimer == 0`: `PauseAudioManager()`, `PauseGameObjects(0)`; set pause flags
+7. `g_dwDelayedOpTimer = 0`
 
 **Focus gain (`WM_ACTIVATE`, `wParam!=WA_INACTIVE`, fullscreen):**
-1. `AcquireInputDevices()`
-2. `ShowCursor` loop until cursor count < 0
-3. `g_bHasFocusLost = false`
-4. `g_dwDelayedOpTimer = FOCUS_CHANGE_DELAY_MS (2000)`
+1. TODO: acquire input via `DAT_00e6b384` (RealInputSystem) vtable at +0xc
+2. `AcquireInputDevices()`
+3. `ShowCursor` loop until cursor count < 0
+4. TODO: `UpdateCursorVisibilityAndScene()` (cursor-visible=false) — not yet called here
+5. `g_bHasFocusLost = false`
+6. `g_dwDelayedOpTimer = FOCUS_CHANGE_DELAY_MS (2000)`
+
+## Pre-DirectX Initialization Stubs
+
+### `PreDirectXInit` (stub)
+- `thunk_FUN_00ec64f9`: sets up audio/render context before D3D device creation
+- Passes engine object `DAT_00bef6d0` to audio system (`DAT_00bf1b18`)
+- Clears audio-present flag `DAT_00bf1b10`
+- Copies audio device string to `DAT_00be93d0`
+- Calls `FUN_006ac0b0()` + `thunk_FUN_00ec6e91()` for audio hardware detection
+- Creates audio output context `DAT_00bf1b1c` via `thunk_FUN_00ec72a9()`
+- Current implementation: empty stub with TODO comments
+
+### `InitDirectXAndSubsystems(int height)` (stub)
+- `thunk_FUN_00eb612e`: creates D3D device, engine objects, registers message handlers, inits audio
+- Called with actual client height from `GetClientRect` after window creation
+- Current implementation: empty stub
+
+### `InitGameSubsystems` (stub)
+- `thunk_FUN_00eb496e`: registers frame callbacks, enumerates DirectInput devices, loads language screen
+- After return: `g_bSubsysInitialized = true` is set by WinMain
+- Current implementation: empty stub
 
 ## DirectX Device Management
 
 ### `ReleaseDirectXResources`
-1. Release `g_pGPUSyncQuery` if non-null
-2. Clear `g_pCachedRT` and `g_pCachedDS`
-3. If `g_pRenderTarget` is non-null and not `D3D_AA_PATH_SENTINEL (0xbacb0ffe)`: release it
-4. Release `g_pBackBuffer` if non-null
-5. Release `g_pAdditionalRT` if non-null
+1. TODO: `thunk_FUN_00ec04dc()` — pre-release cleanup (not yet implemented)
+2. Release `g_pGPUSyncQuery` if non-null
+3. Clear `g_pCachedRT` and `g_pCachedDS`
+4. If `g_pRenderTarget` is non-null and not `D3D_AA_PATH_SENTINEL (0xbacb0ffe)`: release it
+5. Release `g_pBackBuffer` if non-null
+6. Release `g_pAdditionalRT` if non-null
+7. TODO: `thunk_FUN_00ec19b5()` — post-release cleanup (not yet implemented)
 
 ### `RestoreDirectXResources`
-1. `GetBackBuffer(0, 0, MONO)` → `g_pBackBuffer`; set `g_pCachedRT = g_pBackBuffer`
-2. Get surface descriptor from back buffer
-3. `CreateRenderTarget` → `g_pAdditionalRT`
-4. **Non-AA path** (`g_gfxSettings.aaMode == 0`):
+1. `InitRenderStates()` — upload shaders (stub)
+2. If `g_pGPUSyncQuery == NULL`: `CreateGPUSyncQuery()` (stub)
+3. `GetBackBuffer(0, 0, MONO)` → `g_pBackBuffer`; set `g_pCachedRT = g_pBackBuffer`
+4. Get surface descriptor from back buffer
+5. `CreateRenderTarget` → `g_pAdditionalRT`
+6. **Non-AA path** (`g_gfxSettings.aaMode == 0`):
    - `CreateTexture(..., D3DUSAGE_RENDERTARGET)` → texture
    - Release original back buffer, `GetSurfaceLevel(0)` → new `g_pBackBuffer`
    - `g_pRenderTarget = (IDirect3DSurface9*)pTex`
-5. **AA path**: `g_pRenderTarget = (IDirect3DSurface9*)D3D_AA_PATH_SENTINEL`
-6. Set `g_pCachedDS = g_pAdditionalRT`
-7. Call `SetRenderTarget(0, g_pCachedRT)` and `SetDepthStencilSurface(g_pCachedDS)`
-8. TODO: `InitD3DStateDefaults()`
+7. **AA path**: `g_pRenderTarget = (IDirect3DSurface9*)D3D_AA_PATH_SENTINEL`
+8. Set `g_pCachedDS = g_pAdditionalRT`
+9. Call `SetRenderTarget(0, g_pCachedRT)` and `SetDepthStencilSurface(g_pCachedDS)`
+10. `InitD3DStateDefaults()` (stub)
 
 ### `UpdateDirectXDevice`
 1. Query available texture memory (`GetAvailableTextureMem() >> 20`); if 0 < MB < 33: low-memory handler (stub)
 2. `TestCooperativeLevel`:
    - `D3DERR_DEVICELOST`: set `g_bDeviceLost=true`, sleep 50ms, return
-   - `D3DERR_DEVICENOTRESET`: `ReleaseDirectXResources` → `Reset` → `RestoreDirectXResources`
+   - `D3DERR_DEVICENOTRESET`: `ReleaseDirectXResources` → update `g_d3dpp` → `Reset` → `RestoreDirectXResources`
    - Unexpected error: comment notes original calls `FatalError` (not yet implemented)
    - Success: `g_bDeviceLost = false`
 
@@ -216,9 +260,29 @@ State machine on `g_nPauseState`:
 
 ### `ResumeGameObjects`
 State machine on `g_nPauseState`:
-- If state ≤ 3: full resume → set state to `PAUSE_STATE_RESUME (7)`, fall through
+- If state ≤ 3: full resume → set state to `PAUSE_STATE_RESUME (7)`
 - If state == 6: partial resume → set state to 5
 - TODO: trigger animations, call vtable Resume() on all registered systems
+
+## Render Mode Switching
+
+### `UpdateCursorVisibilityAndScene` (stub)
+- `FUN_00ea53ca`: compares requested cursor-visible state vs cached `g_bCursorVisible`
+- If state changed:
+  - cursor=false (focus gained): `SwitchRenderOutputMode(&DAT_00c82b08)`
+  - cursor=true (focus lost): `SwitchRenderOutputMode(&DAT_00c82b00)`
+- Updates `DAT_00bef67e` to new state
+- Called in WinMain cleanup (implemented) and in WM_ACTIVATE (currently TODO)
+- Current implementation: empty stub
+
+### `SwitchRenderOutputMode` (stub)
+- `FUN_00612530`: dispatches render-mode change to listener list
+- Uses scene IDs (`DAT_00c82b00/08`) compared against target (`DAT_00c82ac8`)
+- Current implementation: empty stub
+
+### `PauseGraphicsState` (stub)
+- `FUN_00617b60`: pauses input via RealInputSystem vtable on focus loss
+- Current implementation: empty stub
 
 ## Timing System
 
@@ -253,21 +317,29 @@ DWORD GetGameTime() {
 - Original processes linked list at `DAT_00bef7c0` within a 2ms time budget
 - Current implementation: empty stub with comment
 
+### `QueryMemoryAllocatorMax` (stub)
+- Returns largest free block from the game's internal memory allocator
+- Used for low-water mark tracking in `g_nMinFreeMemory`
+- Current implementation: returns 0
+
 ## Main Game Loop
 
 ### `MainLoop`
 ```
 while (!g_bExitRequested):
   1. UpdateDirectXDevice()
-  2. Fullscreen focus management: unacquire/show cursor on focus loss
+  2. Fullscreen focus management:
+     - g_bHasFocusLost: UnacquireInputDevices(), show cursor, SwitchRenderOutputMode()
+     - Else: if g_bCursorVisible: clear flag, SwitchRenderOutputMode()
   3. PeekMessage(PM_REMOVE):
      - WM_QUIT → set g_bExitRequested
      - Otherwise: TranslateMessage + DispatchMessage
   4. No messages:
      a. GameFrameUpdate()
-     b. Manage g_dwDelayedOpTimer countdown:
-        - On expiry: resume audio (TODO), ResumeGameObjects()
-     c. Frame rate cap: if elapsed < TARGET_FRAME_TIME_MS (16ms): Sleep(0)
+     b. If g_bGameUpdateEnabled: track g_nMinFreeMemory via QueryMemoryAllocatorMax()
+     c. Manage g_dwDelayedOpTimer countdown:
+        - On expiry: TODO AudioStream_Resume(), ResumeGameObjects()
+     d. Frame rate cap: if elapsed < TARGET_FRAME_TIME_MS (16ms): Sleep(0)
 ```
 - Uses `timeGetTime()` for frame elapsed measurement
 - `g_bExitRequested` is the exit condition (set by `WM_QUIT`)
@@ -276,28 +348,41 @@ while (!g_bExitRequested):
 1. `_control87(0x20000, 0x30000)` — FPU denormal prevention
 2. `SaveOrRestoreSystemParameters(false)` — save + disable mouse accel
 3. `strncpy` command line to `g_szCmdLine1` and `g_szCmdLine2`
-4. `FindWindowA` single-instance guard → `TerminateProcess` if duplicate
-5. `RegisterWindowClass`
-6. `LoadGameSettings` — read all registry settings
-7. `ParseCommandLineArg` for `fullscreen` and `widescreen`
-8. Determine window position/size from registry or defaults
-9. `CreateGameWindow(hInstance, winX, winY, winW, winH)`
-10. Restore `Maximized`/`Minimized` state (windowed only)
-11. `UpdateWindow`
-12. TODO: `InitDirectXAndSubsystems(winH)`
-13. TODO: `InitGameSubsystems()`
-14. `MainLoop()`
-15. TODO: render teardown, COM object release
-16. `UnacquireInputDevices()`, show cursor
-17. `SaveOrRestoreSystemParameters(true)` — restore mouse accel
-18. `TerminateProcess(GetCurrentProcess(), 1)` — hard exit (no CRT teardown)
+4. TODO: `CLI_CommandParser_ParseArgs()` — parse extended `-name=value` CLI tokens
+5. `FindWindowA` single-instance guard → `TerminateProcess` if duplicate
+6. `RegisterWindowClass`
+7. `LoadGameSettings` — read all registry settings
+8. `ParseCommandLineArg` for `fullscreen` and `widescreen`
+9. Determine window size (windowed: from registry or gWidth; fullscreen: from gWidth or 640)
+10. `CreateGameWindow(hInstance, winW, winH)`
+11. `PreDirectXInit()` — audio/render context setup (stub)
+12. `GetClientRect(ghWnd)` → `InitDirectXAndSubsystems(clientHeight)` (stub)
+13. `InitGameSubsystems()` (stub); then `g_bSubsysInitialized = true`
+14. Restore `Maximized`/`Minimized` state via `ShowWindow` (SW_MAXIMIZE=3, SW_MINIMIZE=6)
+15. `UpdateWindow(ghWnd)`
+16. `MainLoop()`
+17. Cleanup:
+    - TODO: `RenderAndAudioTeardown()`
+    - Release `g_pComObject` via TODO callback manager destructor
+    - `SaveOptionsOnExit()` (stub)
+    - TODO: pause RealInputSystem via vtable
+    - `UnacquireInputDevices()`
+    - `ShowCursor` loop + `g_bHasFocusLost = true`
+    - `UpdateCursorVisibilityAndScene()` (stub)
+    - `SaveOrRestoreSystemParameters(true)` — restore mouse accel
+    - `TerminateProcess(GetCurrentProcess(), 1)` — hard exit (no CRT teardown)
 
 ## Known Gaps / TODOs
-- `InitDirectXAndSubsystems` and `InitGameSubsystems` are not yet implemented (calls stubbed out)
-- `PauseAudioManager`, `PauseGameObjects`, `ResumeGameObjects` are stubs (state machine logic without vtable calls)
+- `CLI_CommandParser_ParseArgs()` not implemented (TODO comment in WinMain)
+- Engine object factory (`GetOrInitCallbackManager`) not implemented; `g_pComObject` is NULL-initialized
+- `PreDirectXInit`, `InitDirectXAndSubsystems`, `InitGameSubsystems` are empty stubs
+- `SaveOptionsOnExit` is an empty stub (no actual registry writes yet)
+- `UpdateCursorVisibilityAndScene`, `SwitchRenderOutputMode`, `PauseGraphicsState` are empty stubs
+- WM_ACTIVATE focus-loss and focus-gain paths have `UpdateCursorVisibilityAndScene` as TODO
+- WM_ACTIVATE focus-gain path has RealInputSystem vtable re-acquire as TODO
+- WinMain cleanup has `RenderAndAudioTeardown` and engine object release as TODO
+- `PauseAudioManager`, `PauseGameObjects`, `ResumeGameObjects` are state-machine skeletons without vtable calls
 - `ProcessDeferredCallbacks` is a stub
 - `GameFrameUpdate` does not yet call the frame callback function pointers
-- `InitD3DStateDefaults` is noted in `RestoreDirectXResources` but not called
-- Render teardown on exit is commented as TODO
 - `FatalError` on unexpected `TestCooperativeLevel` result is not implemented
-- `PauseGraphicsState` call in `WM_ACTIVATE`/`WM_SETFOCUS` is a TODO comment
+- `thunk_FUN_00ec04dc` and `thunk_FUN_00ec19b5` in DX resource management are unimplemented
