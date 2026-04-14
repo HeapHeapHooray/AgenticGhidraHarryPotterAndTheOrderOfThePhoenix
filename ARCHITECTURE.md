@@ -10,8 +10,8 @@ The program starts at `___tmainCRTStartup` (`006f54d2`), which is the standard C
 The `WinMain` function is the core entry point for the game logic. Its primary responsibilities include:
 1.  **System Parameters Initialization**: Calls `SystemParametersInfoA` to set or retrieve system-wide parameters (e.g., mouse settings).
 2.  **Single Instance Check**: Uses `FindWindowA` to search for a window with the class name `OrderOfThePhoenixMainWndClass`. If an instance is already running, the new process terminates.
-3.  **Settings Loading**: Loads game settings such as resolution (`Width`, `ModeXWidth`, etc.), bit depth, and other graphical options from a configuration source (likely an INI file or registry, accessed via `FUN_0060ce60`).
-4.  **Window Creation**: Calls `FUN_0060db20` to create the main game window with the class `OrderOfThePhoenixMainWndClass`.
+3.  **Settings Loading**: Loads game settings such as resolution (`Width`, `ModeXWidth`, etc.), bit depth, and other graphical options from the Windows Registry (`HKEY_CURRENT_USER\Software\Electronic Arts\Harry Potter and the Order of the Phoenix\GameSettings`).
+4.  **Window Creation**: Calls `CreateGameWindow` (`0060db20`) to create the main game window with the class `OrderOfThePhoenixMainWndClass`.
 5.  **Graphics Initialization**: Performs initialization related to rendering (potentially DirectX, indicated by calls to `FUN_00617bf0` and related data structures).
 6.  **Main Loop**: Enters a processing loop (`FUN_0060dc10`) which handles window messages and game updates.
 7.  **Termination**: Cleans up resources and terminates the process.

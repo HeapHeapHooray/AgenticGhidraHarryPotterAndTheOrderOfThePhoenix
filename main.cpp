@@ -11,6 +11,11 @@ void LoadGameSettings() {
 }
 
 int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd) {
+    // Original code modifies some system parameters
+    SystemParametersInfoA(0x3a, 8, NULL, 0); // SPI_SETMOUSESPEED?
+    SystemParametersInfoA(0x34, 8, NULL, 0);
+    SystemParametersInfoA(0x32, 0x18, NULL, 0);
+
     // Single instance check
     if (FindWindowA("OrderOfThePhoenixMainWndClass", NULL)) {
         return 0;
