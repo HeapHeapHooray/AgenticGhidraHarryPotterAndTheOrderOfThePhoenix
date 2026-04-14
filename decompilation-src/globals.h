@@ -119,7 +119,7 @@ enum GamePauseState {
 
 // ── Function prototypes ───────────────────────────────────────────────────────
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd);
-HWND CreateGameWindow(HINSTANCE hInstance, int x, int y, int width, int height);
+HWND CreateGameWindow(HINSTANCE hInstance, int width, int height);
 void MainLoop();
 BOOL RegisterWindowClass(HINSTANCE hInstance);
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -130,10 +130,24 @@ void LoadGameSettings();
 void SaveWindowPlacement(HWND hWnd);
 bool ParseCommandLineArg(const char* cmdLine, const char* flag, const char** valueOut);
 
+// DirectX subsystem init (called from WinMain after window creation)
+void InitDirectXAndSubsystems(int height); // thunk_FUN_00eb612e — creates D3D device + DirectInput
+void InitGameSubsystems();                 // thunk_FUN_00eb496e — registers callbacks, loads language screen
+
 // DirectX functions
 void UpdateDirectXDevice();
 void ReleaseDirectXResources();
 void RestoreDirectXResources();
+void InitRenderStates();                   // FUN_00675950 — uploads shaders, sets initial render states
+void CreateGPUSyncQuery();                 // FUN_0067b820 — creates D3DQUERYTYPE_EVENT sync query
+void InitD3DStateDefaults();               // FUN_00674430 — initializes render/sampler/texture stage defaults
+void PauseGraphicsState();                 // FUN_00617b60 — pauses render output on focus loss
+
+// Render mode switching
+void SwitchRenderOutputMode();             // FUN_00612530 — dispatches to render listener list
+
+// Memory allocator query
+SIZE_T QueryMemoryAllocatorMax();          // thunk_FUN_00eb6dbc — returns largest free block in allocator
 
 // DirectInput functions
 void UnacquireInputDevices();
@@ -174,6 +188,8 @@ extern IDirect3DSurface9* g_pAdditionalRT;
 extern IDirect3DSurface9* g_pCachedRT;
 extern IDirect3DSurface9* g_pCachedDS;
 extern IUnknown*          g_pGPUSyncQuery;
+extern D3DPRESENT_PARAMETERS g_d3dpp;  // DAT_00b94af8 saved present params for Reset
+extern IUnknown*          g_pComObject; // DAT_00bef6d0 created in WinMain, released at exit
 
 // DirectInput globals
 extern IDirectInput8*      g_pDirectInput;

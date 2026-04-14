@@ -21,6 +21,8 @@ IDirect3DSurface9* g_pAdditionalRT = NULL;
 IDirect3DSurface9* g_pCachedRT    = NULL;
 IDirect3DSurface9* g_pCachedDS    = NULL;
 IUnknown*          g_pGPUSyncQuery = NULL;
+D3DPRESENT_PARAMETERS g_d3dpp      = {0};  // DAT_00b94af8 saved for Reset
+IUnknown*          g_pComObject    = NULL;  // DAT_00bef6d0
 
 IDirectInput8*       g_pDirectInput  = NULL;
 IDirectInputDevice8* g_pKeyboard     = NULL;
@@ -74,7 +76,13 @@ int ReadRegistrySetting(const char* appName, const char* section,
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, regPath, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         RegQueryValueExA(hKey, key, NULL, NULL, (LPBYTE)&value, &dataSize);
         RegCloseKey(hKey);
-        // Original also calls FUN_0060cc70 here to create the HKCU entry with default
+        // Original (FUN_0060cc70): write the found value back to HKCU so future reads are faster.
+        HKEY hkcu;
+        if (RegCreateKeyExA(HKEY_CURRENT_USER, regPath, 0, NULL, 0,
+                            KEY_WRITE, NULL, &hkcu, NULL) == ERROR_SUCCESS) {
+            RegSetValueExA(hkcu, key, 0, REG_DWORD, (LPBYTE)&value, sizeof(DWORD));
+            RegCloseKey(hkcu);
+        }
         return (int)value;
     }
 
@@ -280,6 +288,9 @@ void SaveWindowPlacement(HWND hWnd) {
 // ── DirectX resource management ───────────────────────────────────────────────
 
 void ReleaseDirectXResources() {
+    // Pre-release cleanup (thunk_FUN_00ec04dc — unknown, called before surface releases)
+    // TODO: thunk_FUN_00ec04dc()
+
     // Release GPU sync query
     if (g_pGPUSyncQuery) {
         g_pGPUSyncQuery->Release();
@@ -306,10 +317,75 @@ void ReleaseDirectXResources() {
         g_pAdditionalRT->Release();
         g_pAdditionalRT = NULL;
     }
+
+    // Post-release cleanup (thunk_FUN_00ec19b5 — unknown, called after surface releases)
+    // TODO: thunk_FUN_00ec19b5()
+}
+
+// ── DirectX subsystem init stubs ──────────────────────────────────────────────
+// These are stubs; the full implementations are in deeper engine code.
+
+void InitRenderStates() {
+    // FUN_00675950: Uploads vertex/pixel shaders to device and sets initial render states.
+    // TODO: UploadVertexShaders(), UploadPixelShaders()
+}
+
+void CreateGPUSyncQuery() {
+    // FUN_0067b820: Creates a D3DQUERYTYPE_EVENT query for GPU-CPU synchronization.
+    // Stored in g_pGPUSyncQuery. Type depends on g_gfxSettings.filterFlip (swap effect).
+    // TODO: g_pd3dDevice->CreateQuery(D3DQUERYTYPE_EVENT, (IDirect3DQuery9**)&g_pGPUSyncQuery)
+}
+
+void InitD3DStateDefaults() {
+    // FUN_00674430: Initializes render state, sampler state, and texture stage state
+    // tables to DirectX defaults. Uses SetCachedRenderState to avoid redundant calls.
+    // Also conditionally adjusts blend states for hardware capability differences.
+    // TODO: set render state cache array, sampler states, texture stage states
+}
+
+void PauseGraphicsState() {
+    // FUN_00617b60: Pauses render output. Called on focus loss to prevent
+    // rendering while the window does not have focus.
+    // TODO: implement render pause
+}
+
+void SwitchRenderOutputMode() {
+    // FUN_00612530: Dispatches a render-mode change to the listener list.
+    // Uses scene IDs (DAT_00c82b00/08) compared against target (DAT_00c82ac8).
+    // TODO: implement observer dispatch
+}
+
+SIZE_T QueryMemoryAllocatorMax() {
+    // thunk_FUN_00eb6dbc: Returns the size of the largest free block in the
+    // game's internal memory allocator (thread-safe via critical section).
+    // Used to track memory pressure (low-water mark in g_nMinFreeMemory).
+    return 0; // TODO: implement allocator query
+}
+
+void InitDirectXAndSubsystems(int height) {
+    // thunk_FUN_00eb612e: Creates D3D device (FUN_00614370), additional graphics
+    // init (FUN_0060c2e0), finalizes device (FUN_006147f0), DirectInput init.
+    // Sets subsystem state flags DAT_008df65a=1, DAT_00aeea5c=2.
+    // TODO: implement
+    (void)height;
+}
+
+void InitGameSubsystems() {
+    // thunk_FUN_00eb496e: Registers frame callbacks, enumerates DirectInput
+    // devices (FUN_00688370(4,0)), loads language selection screen.
+    // TODO: implement
 }
 
 void RestoreDirectXResources() {
     if (!g_pd3dDevice) return;
+
+    // Step 1: Re-upload shaders and set initial render states
+    InitRenderStates();
+
+    // Step 2: Create GPU sync query if not already present
+    if (!g_pGPUSyncQuery) {
+        CreateGPUSyncQuery();
+    }
 
     // Get back buffer
     g_pd3dDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &g_pBackBuffer);
@@ -351,8 +427,8 @@ void RestoreDirectXResources() {
     if (g_pCachedRT) g_pd3dDevice->SetRenderTarget(0, g_pCachedRT);
     if (g_pCachedDS) g_pd3dDevice->SetDepthStencilSurface(g_pCachedDS);
 
-    // Initialize D3D state defaults (render/sampler/texture stage states)
-    // TODO: InitD3DStateDefaults() — initializes render state cache arrays
+    // Step 6: Initialize D3D render state, sampler state, and texture stage defaults
+    InitD3DStateDefaults();
 }
 
 void UpdateDirectXDevice() {
@@ -376,16 +452,14 @@ void UpdateDirectXDevice() {
         if (hr == D3DERR_DEVICENOTRESET) {
             ReleaseDirectXResources();
 
-            D3DPRESENT_PARAMETERS d3dpp = {0};
-            d3dpp.BackBufferWidth  = gWidth;
-            d3dpp.BackBufferHeight = gHeight;
-            d3dpp.BackBufferFormat = D3DFMT_UNKNOWN;
-            d3dpp.BackBufferCount  = 1;
-            d3dpp.SwapEffect       = D3DSWAPEFFECT_DISCARD;
-            d3dpp.hDeviceWindow    = ghWnd;
-            d3dpp.Windowed         = !bIsFullscreen;
+            // Reuse the saved present parameters (g_d3dpp, matching DAT_00b94af8).
+            // These were set up by InitDirectXAndSubsystems; only update volatile fields.
+            g_d3dpp.BackBufferWidth  = gWidth;
+            g_d3dpp.BackBufferHeight = gHeight;
+            g_d3dpp.hDeviceWindow    = ghWnd;
+            g_d3dpp.Windowed         = !bIsFullscreen;
 
-            if (SUCCEEDED(g_pd3dDevice->Reset(&d3dpp))) {
+            if (SUCCEEDED(g_pd3dDevice->Reset(&g_d3dpp))) {
                 RestoreDirectXResources();
             }
         }
@@ -516,9 +590,16 @@ void GameFrameUpdate() {
         g_ullNextCallback += g_ullCallbackInterval;
         g_nFrameFlip ^= 1;
 
-        // Primary callback: UpdateFrameTimingPrimary (updates timing double buffer)
-        // Secondary callback: dispatches to registered render listeners
-        // TODO: call (*DAT_008e1644[0])(&gameTick) and (*DAT_008e1644[1])()
+        // Store current timing in the double-buffer at DAT_00c83170[flip*8].
+        // TODO: DAT_00c83170[g_nFrameFlip * 2] = g_dwGameTicks; (timing double-buffer)
+
+        // Primary callback: UpdateFrameTimingPrimary (updates timing double buffer + tick counter)
+        // TODO: UpdateFrameTimingPrimary(&g_dwGameTicks);
+        // TODO: (*callback_table[0])(&g_dwGameTicks);  // DAT_008e1644[0]
+
+        // Secondary callback: InterpolateFrameTime + dispatch to render listeners
+        // TODO: InterpolateFrameTime();
+        // TODO: (*callback_table[1])();               // DAT_008e1644[1]
     }
 }
 
@@ -539,28 +620,36 @@ BOOL RegisterWindowClass(HINSTANCE hInstance) {
     return RegisterClassA(&wc) != 0;
 }
 
-// x, y: initial window position; width, height: desired client area size.
-// In fullscreen mode x/y are ignored (window is always at 0,0 TOPMOST).
-HWND CreateGameWindow(HINSTANCE hInstance, int x, int y, int width, int height) {
-    RECT rect = {x, y, x + width, y + height};
+// width, height: desired client area size.
+// Position in windowed mode is read from the registry (defaults: 300, 32).
+// In fullscreen mode the window is always placed at (0,0) TOPMOST.
+HWND CreateGameWindow(HINSTANCE hInstance, int width, int height) {
+    static const char* kApp     = "Harry Potter and the Order of the Phoenix";
+    static const char* kSection = "GameSettings";
+
+    int x, y;
+    char buf[POSITION_BUFFER_SIZE];
+    RECT rect;
     DWORD dwStyle;
     DWORD dwExStyle;
     HWND hWndInsertAfter;
 
     if (bIsFullscreen) {
         // Fullscreen: WS_POPUP (borderless), always on top, no menu
+        x = 0; y = 0;
         dwStyle         = WS_POPUP;
         dwExStyle       = WS_EX_TOPMOST;
         hWndInsertAfter = HWND_TOPMOST;
-        rect.left       = 0;
-        rect.top        = 0;
-        rect.right      = width;
-        rect.bottom     = height;
     } else {
+        // Windowed: restore position from registry
+        ReadRegistrySettingStr(kApp, kSection, "PosX", "300", buf, sizeof(buf));  x = atoi(buf);
+        ReadRegistrySettingStr(kApp, kSection, "PosY", "32",  buf, sizeof(buf));  y = atoi(buf);
         dwStyle         = WS_OVERLAPPEDWINDOW;
         dwExStyle       = 0;
         hWndInsertAfter = NULL;
     }
+
+    rect = {x, y, x + width, y + height};
 
     AdjustWindowRectEx(&rect, dwStyle, FALSE, dwExStyle);
 
@@ -613,13 +702,14 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                 if (LOWORD(wParam) == WA_INACTIVE) {
                     // Window losing focus ─────────────────────────────────────
                     // (1) Pause graphics/rendering state
-                    // TODO: PauseGraphicsState()
+                    PauseGraphicsState();  // FUN_00617b60
 
                     UnacquireInputDevices();
                     while (ShowCursor(TRUE) < 1);
                     g_bHasFocusLost = true;
 
-                    // (2) thunk_FUN_00ea53ca() — render pause
+                    // (2) Render pause (thunk_FUN_00ea53ca — pauses render pipeline)
+                    // TODO: thunk_FUN_00ea53ca()
 
                     // (3) If delayed-op timer is not already running, queue pauses
                     if (g_dwDelayedOpTimer == 0) {
@@ -634,8 +724,13 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                     g_dwDelayedOpTimer = 0;
                 } else {
                     // Window gaining focus ────────────────────────────────────
+                    // Original: acquires input via game state object vtable at DAT_00e6b384+0xc
+                    // then calls AcquireInputDevices().
+                    // TODO: (*((DAT_00e6b384+0xc)->vtable[...]))() — device acquire via game obj
                     AcquireInputDevices();
                     while (ShowCursor(FALSE) >= 0);
+                    // (render resume — thunk_FUN_00ea53ca also called on gain)
+                    // TODO: thunk_FUN_00ea53ca()
                     g_bHasFocusLost = false;
                     g_dwDelayedOpTimer = FOCUS_CHANGE_DELAY_MS;
                 }
@@ -653,7 +748,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
             } else {
                 // Lost focus: show system arrow cursor
                 SetCursor(LoadCursorA(NULL, IDC_ARROW));
-                // TODO: PauseGraphicsState()
+                PauseGraphicsState();  // FUN_00617b60
                 UnacquireInputDevices();
                 while (ShowCursor(TRUE) < 1);
             }
@@ -728,11 +823,16 @@ void MainLoop() {
                 if (!g_bCursorVisible) {
                     g_bCursorVisible = true;
                     bCursorStateChanged = true;
+                    // Original also calls SwitchRenderOutputMode with scene IDs
+                    // from DAT_00c82b00/08 vs target DAT_00c82ac8
+                    SwitchRenderOutputMode();
                 }
             } else {
                 if (g_bCursorVisible) {
                     g_bCursorVisible = false;
                     bCursorStateChanged = true;
+                    // Original also calls SwitchRenderOutputMode here
+                    SwitchRenderOutputMode();
                 }
             }
         }
@@ -753,6 +853,15 @@ void MainLoop() {
 
             GameFrameUpdate();
 
+            // Track minimum available memory (low-water mark for memory pressure).
+            // Only when game update subsystem is enabled (matching original condition).
+            if (g_bGameUpdateEnabled) {
+                SIZE_T available = QueryMemoryAllocatorMax();
+                if (available < g_nMinFreeMemory) {
+                    g_nMinFreeMemory = available;
+                }
+            }
+
             // Count down the focus-change delayed operation timer.
             // When it reaches zero, resume any paused audio and game systems.
             DWORD elapsed = timeGetTime() - frameStart;
@@ -763,12 +872,13 @@ void MainLoop() {
                     g_dwDelayedOpTimer = 0;
 
                     // Resume audio if it was paused on focus loss
-                    if (!g_bAudioWasPaused) {
-                        // TODO: thunk_FUN_00ec67e8() — resume audio
+                    if (g_bAudioWasPaused) {
+                        // thunk_FUN_00ec67e8(): resumes audio stream after focus-loss pause
+                        // TODO: thunk_FUN_00ec67e8()
                     }
 
                     // Resume game objects/physics
-                    if (!g_bUpdatesWerePaused) {
+                    if (g_bUpdatesWerePaused) {
                         ResumeGameObjects();
                     }
 
@@ -801,6 +911,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     strncpy(g_szCmdLine1, lpCmdLine, sizeof(g_szCmdLine1) - 1);
     strncpy(g_szCmdLine2, lpCmdLine, sizeof(g_szCmdLine2) - 1);
 
+    // COM/thread initialization (thunk_FUN_00eb787a — likely CoInitialize or thread pool setup).
+    // Called before single-instance check in the original.
+    // TODO: thunk_FUN_00eb787a()
+
     // Single-instance guard: terminate if another instance is already running
     if (FindWindowA("OrderOfThePhoenixMainWndClass", NULL) != NULL) {
         TerminateProcess(GetCurrentProcess(), 0);
@@ -829,39 +943,42 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     bool bWidescreen = ParseCommandLineArg(lpCmdLine, "widescreen", NULL);
     float aspectRatio = bWidescreen ? (16.0f / 9.0f) : (4.0f / 3.0f);
 
-    // Determine window position and size
-    int winX, winY, winW, winH;
+    // Determine window size (position is handled inside CreateGameWindow)
     static const char* kApp     = "Harry Potter and the Order of the Phoenix";
     static const char* kSection = "GameSettings";
+    int winW, winH;
 
     if (!bIsFullscreen) {
-        // Windowed mode: restore position and size from registry
-        char buf[POSITION_BUFFER_SIZE];
-        ReadRegistrySettingStr(kApp, kSection, "PosX",  "300", buf, sizeof(buf));  winX = atoi(buf);
-        ReadRegistrySettingStr(kApp, kSection, "PosY",  "32",  buf, sizeof(buf));  winY = atoi(buf);
-
+        // Windowed mode: read size from registry or derive from gWidth
         if (gWidth != 0) {
             winW = gWidth;
             winH = (int)(gWidth / aspectRatio);
         } else {
+            char buf[POSITION_BUFFER_SIZE];
             ReadRegistrySettingStr(kApp, kSection, "SizeX", "640", buf, sizeof(buf));  winW = atoi(buf);
             ReadRegistrySettingStr(kApp, kSection, "SizeY", "480", buf, sizeof(buf));  winH = atoi(buf);
         }
     } else {
-        winX = 0;
-        winY = 0;
         winW = (gWidth != 0) ? gWidth : DEFAULT_WINDOW_WIDTH;
         winH = (int)(winW / aspectRatio);
     }
 
-    // Create main window
-    ghWnd = CreateGameWindow(hInstance, winX, winY, winW, winH);
+    // Create main window (position is read from registry inside CreateGameWindow)
+    ghWnd = CreateGameWindow(hInstance, winW, winH);
     if (!ghWnd) {
         TerminateProcess(GetCurrentProcess(), 0);
         return 0;
     }
 
-    // Restore maximized/minimized state in windowed mode
+    UpdateWindow(ghWnd);
+
+    // Initialize DirectX device and core engine subsystems.
+    // Matching original: this is called before window placement restore.
+    InitDirectXAndSubsystems(winH);  // thunk_FUN_00eb612e
+    InitGameSubsystems();            // thunk_FUN_00eb496e
+
+    // Restore maximized/minimized state in windowed mode.
+    // Original restores placement after subsystem init.
     if (!bIsFullscreen) {
         char maximized[POSITION_BUFFER_SIZE];
         char minimized[POSITION_BUFFER_SIZE];
@@ -877,18 +994,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         }
     }
 
-    UpdateWindow(ghWnd);
-
-    // TODO: InitDirectXAndSubsystems(winH) — creates D3D device and DirectInput
-    // TODO: InitGameSubsystems() — registers callbacks, loads language screen
-
     // Enter main game loop
     MainLoop();
 
     // Cleanup ─────────────────────────────────────────────────────────────────
 
-    // TODO: render teardown (thunk_FUN_00ec6610)
-    // TODO: release DAT_00bef6d0 COM object
+    // Render teardown (thunk_FUN_00ec6610 — releases render pipeline resources)
+    // TODO: thunk_FUN_00ec6610()
+
+    // Release COM object created in WinMain (DAT_00bef6d0)
+    if (g_pComObject) {
+        g_pComObject->Release();
+        g_pComObject = NULL;
+    }
 
     UnacquireInputDevices();
     while (ShowCursor(TRUE) < 1);
