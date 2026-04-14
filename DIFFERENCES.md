@@ -15,3 +15,9 @@ In `CreateGameWindow` (`FUN_0060db20`), the `in_EAX` variable is used uninitiali
   local_10.bottom = in_EAX + param_4;
 ```
 This likely should be `local_10.top + param_4` or similar.
+
+## Window Class Registration
+The `RegisterWindowClass` (`FUN_00eb4b95`) function calls `UnregisterClassA` before calling `RegisterClassA`. This might be to ensure a clean state if the class was already registered by a previous (crashed) instance, although `FindWindowA` already checks for a running instance.
+
+## Registry Settings
+Settings are read from `HKEY_CURRENT_USER\Software\Electronic Arts\Harry Potter and the Order of the Phoenix\GameSettings`. The `ReadRegistrySetting` (`FUN_0060ce60`) function handles this and also has logic to create the key if it doesn't exist.
