@@ -251,22 +251,41 @@ Linked list at `DAT_00bef7c0`. Each node has next pointer at `+0x7c`.
 | `DAT_00bf1930` | Back buffer `IDirect3DSurface9*` |
 | `DAT_00bf1934` | Render target texture or `0xbacb0ffe` sentinel |
 | `DAT_00bf1938` | Additional render target `IDirect3DSurface9*` |
-| `DAT_00af1390` | Cached render-to surface |
-| `DAT_00ae9250` | Cached secondary render target |
+| `DAT_00af1390` | Cached render target (mirrors `DAT_00bf1930`) |
+| `DAT_00ae9250` | Cached depth-stencil surface |
 | `DAT_00b95034` | GPU sync query object (event query) |
 | `DAT_00bf18aa` | Device-lost flag |
 | `DAT_00bf1970` | AAMode (0 = AA path active) |
 | `DAT_00b94af8` | Saved `D3DPRESENT_PARAMETERS` for Reset |
+| `DAT_00b94748` | Render state cache array (indexed by D3DRENDERSTATETYPE) |
+| `DAT_009dcc50/54` | Vertex shader type/pointer pairs (count: `DAT_00bf1a08`) |
+| `DAT_00e17ce0` | Pixel shader object array (count: `DAT_00bf1a0c`, stride 0x160) |
+| `DAT_00bf1a08` | Vertex shader count |
+| `DAT_00bf1a0c` | Pixel shader count |
+| `DAT_00bf1994` | Shader/feature level capability (> 2 = extended) |
+| `DAT_00bf193c` | Available texture memory in MB (updated by QueryAvailableTextureMem) |
 
 ### D3D State Defaults (`InitD3DStateDefaults` `00674430`)
 Initializes large arrays of render state, sampler state, and texture stage state defaults.
-Conditionally adjusts blend states for hardware that lacks certain texture operation capabilities (`D3DTEXTURECAPS`).
+Uses `SetCachedRenderState` (`0067eb90`) which caches values in `DAT_00b94748` to avoid redundant D3D calls.
+Conditionally adjusts blend states for hardware that lacks certain texture operation capabilities (checked via `GetAdapterCapsPtr` + 0x3c bit tests).
 Also sets: fog state defaults (`_DAT_00d7ea68=5`), clears `DAT_008d3878` sentinel area with `0xcd`.
 
 ### GPU Sync Query (`CreateGPUSyncQuery` `0067b820`)
 Creates a `D3DQUERYTYPE_EVENT` query (vtable offset 0xe0 on device).
 Stored in `DAT_00b95034`. Used for GPU-CPU synchronization.
 The `swap effect` flag (`DAT_008ae1fc`) selects between DISCARD (2) and COPY (0) queries.
+
+### Cached Render Target Setter (`SetCachedRenderTargets` `0067ecf0`)
+Avoids redundant `SetRenderTarget`/`SetDepthStencilSurface` calls by caching the last set values in `DAT_00af1390` (render target) and `DAT_00ae9250` (depth stencil).
+
+### Video Memory Monitor (`QueryAvailableTextureMem` `0067d2e0`)
+Calls `GetAvailableTextureMem` (vtable+0x10), stores result in MB in `DAT_00bf193c`.
+If result < 33MB, calls low-memory handler. Used to detect texture memory pressure.
+
+### Adapter Capabilities (`GetAdapterCapsPtr` `0066dfe0`)
+Returns pointer to the D3DCAPS9 data: `DAT_008ae200 * 0x584 + 0x454 + DAT_00bf19a8`
+Each adapter entry is 0x584 bytes; offset 0x454 into the entry holds capability data.
 
 ## DirectInput Management
 
@@ -282,11 +301,48 @@ Also calls `Ordinal_5(1/0)` — custom cursor show/hide.
 
 ## Game State and Audio
 
+### DirectX and Subsystem Initialization (`InitDirectXAndSubsystems` `00eb612e`)
+Called from WinMain after window creation with window height:
+1. `FUN_00614370(height, ?, hWnd)` — creates D3D device and set present params
+2. `FUN_0060c2e0()` — additional graphics init
+3. Sets `DAT_008df65a=1`, `DAT_00aeea5c=2` (subsystem state flags)
+4. `FUN_006147f0()` — finalizes device setup
+5. `thunk_FUN_00eb60d3()` — DirectInput or audio init
+Returns 0 on success (OR of all sub-failures).
+
+### Game Subsystem Initialization (`InitGameSubsystems` `00eb496e`)
+Registers callbacks, enumerates DirectInput devices (`FUN_00688370(4, 0)`), and loads the language/localization selection screen (`FUN_005090a0("LanguageSelect")`).
+
+### Frame Callback System (`InitFrameCallbackSystem` `00612f00`)
+Initializes the frame callback singleton at `DAT_00e6e870`:
+- `DAT_00e6e870 = &PTR_FUN_00883f3c` (primary callback entry)
+- `DAT_00e6e874 = &PTR_FUN_00883f4c` (secondary callback entry)
+- `_DAT_00bef728 = &DAT_00e6e870` (pointer to the table, = `DAT_008e1644`)
+
 ### Pause/Resume System
-- **Focus loss**: `PauseAudio()` (`FUN_0061ef80`) + `PauseGameUpdates(0)` (`FUN_0058b790`)
+- **Focus loss**: `PauseAudioManager()` (`FUN_0061ef80`) + `PauseGameObjects(0)` (`FUN_0058b790`)
 - **Resume**: triggered by `DAT_00bef6d8` expiry:
   - `thunk_FUN_00ec67e8()` resumes audio
-  - `ResumeGameUpdates()` (`FUN_0058b8a0`) resumes physics/updates
+  - `ResumeGameObjects()` (`FUN_0058b8a0`) resumes game objects
+
+### Game Object Pause State Machine (`DAT_00c7b908`)
+Controls which systems are paused (values 0–7):
+- **State 0 (full pause)**: "chapter-cutscene-in" animation, vtable+0x24 (Pause) on all systems. Records pause time in `_DAT_00c7b90c = DAT_00c8311c/3 + param_1`.
+- **States 4–5 (audio-only pause)**: pauses `DAT_00c7c370` (audio manager) only, transitions to state 6.
+- **State 6**: fully paused, no-op.
+- **State 7 (resuming)**: "default" animation, vtable+0x28 (Resume) on all systems, clears `DAT_00c6d7e0`.
+
+Pausable systems: `DAT_00c7c370` (audio/music manager), `DAT_00c7b924` (secondary system), array at `DAT_00c7ba4c` (stride 0x12×4), additional systems at `DAT_00c7d038+0xc` (stride 0xb×4).
+
+### Deferred Render Batch Queue
+Linked list at `DAT_00bef7c0` (processed by `ProcessDeferredCallbacks`).
+Each node is a draw call descriptor (geometry + shader + flags).
+`BuildRenderBatch` (`0063d600`) processes one node per call, building entries in the material table at `DAT_00ae9258`.
+Recognized shader types: `BLOOM`, `GLASS`, `BACKDROP`.
+Returns 0 while more vertices remain; 1 when the node is complete (removed from list).
+
+### Memory Pressure Tracking
+`QueryMemoryAllocatorMax` (`00eb6dbc`) queries the game's internal memory allocator for the largest free block size (thread-safe via critical section). The minimum value across all frames is tracked in `DAT_008afb08`, providing a low-water-mark for memory pressure detection.
 
 ### Global State Flags
 | Address | Name | Purpose |
