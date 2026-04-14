@@ -1,346 +1,213 @@
-# Differences Between Original and C++ Decompilation
-
-This document compares ARCHITECTURE.md (original hp.exe) with CPP-ARCHITECTURE.md (C++ decompilation) to identify gaps and areas needing improvement for functional equivalence.
-
-## Missing Implementations
-
-### 1. DirectX Initialization
-**Original (ARCHITECTURE.md):**
-- Initializes DirectX 9 rendering system
-- Creates device with specific present parameters
-- Sets up multiple render targets
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ❌ DirectX initialization marked as TODO
-- ❌ No device creation code
-- ❌ No D3DPRESENT_PARAMETERS setup
-- ✅ Has device lost recovery framework
-
-**Action needed:**
-- Implement DirectX device creation with proper parameters
-- Determine adapter selection logic
-- Identify present parameters (buffer format, swap effect, etc.)
-
-### 2. DirectInput Initialization
-**Original (ARCHITECTURE.md):**
-- Initializes DirectInput 8
-- Creates keyboard, mouse, and joystick devices
-- Sets up data formats and cooperative levels
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ❌ DirectInput initialization marked as TODO
-- ✅ Has acquire/unacquire framework
-- ✅ Has device pointers defined
-
-**Action needed:**
-- Implement DirectInput8Create
-- Create and configure keyboard device
-- Create and configure mouse device
-- Enumerate and create joystick devices
-
-### 3. Game Update Functions
-**Original (ARCHITECTURE.md):**
-- GameFrameUpdate calls multiple unknown functions
-- FUN_00636830(): Pre-update logic
-- FUN_00617f50: Primary frame callback
-- FUN_00617ee0: Secondary frame callback
-- Function pointer table at DAT_008e1644
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Has frame timing with delta cap
-- ✅ Has accumulation and 3x speed multiplier
-- ❌ Missing actual game update logic
-- ❌ Missing frame callbacks
-- ❌ Missing function pointer table
-
-**Action needed:**
-- Identify and implement pre-update function
-- Implement frame callback system
-- Set up function pointer table for callbacks
-
-### 4. Graphics Initialization Functions
-**Original (ARCHITECTURE.md):**
-- RestoreDirectXResources calls:
-  - FUN_00675950()
-  - FUN_0067b820()
-  - FUN_0067bb20()
-  - FUN_00674430()
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Has basic resource restore framework
-- ❌ Missing these initialization functions
-
-**Action needed:**
-- Identify what these functions do
-- Implement equivalent C++ code
-
-### 5. Window Close Cleanup
-**Original (ARCHITECTURE.md):**
-- WM_CLOSE calls FUN_0060d220 before DestroyWindow
-- FUN_0060d220 identified as SaveWindowPlacement
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ WM_CLOSE calls SaveWindowPlacement
-- ✅ Correctly implemented
-
-**No action needed** ✓
-
-## Implementation Accuracy Issues
-
-### 6. System Parameter Values
-**Original (ARCHITECTURE.md):**
-- Exact parameter values saved in structures
-- Flag manipulation clears specific bits
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Correctly saves parameters
-- ⚠️ Assumes flags are at specific offsets in structure
-- ⚠️ May not match exact memory layout
-
-**Action needed:**
-- Verify SystemParams structure matches original memory layout
-- Confirm flag offset assumptions
-
-### 7. Window Procedure Message Handling
-**Original (ARCHITECTURE.md):**
-- Handles many window messages
-- Complex focus management with global flags
-- Multiple DAT_ global variables referenced
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Implements key messages
-- ⚠️ May be missing some edge cases
-- ⚠️ Simplified global flag management
-
-**Action needed:**
-- Review all message handling in original WindowProc
-- Ensure all global flags are properly represented
-- Verify WM_ACTIVATE logic matches exactly
-
-### 8. Registry Reading with std::string
-**Original (ARCHITECTURE.md):**
-- Uses std::basic_string for registry paths
-- Complex C++ string construction
-- Throws exceptions on errors
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Uses simple C string handling
-- ⚠️ Doesn't throw exceptions
-- ⚠️ Simplified error handling
-
-**Action needed:**
-- Consider if exception handling is needed
-- Verify error paths match original behavior
-
-### 9. DirectX Resource Management
-**Original (ARCHITECTURE.md):**
-- Releases 4 different DirectX interfaces
-- Complex conditional logic (checks for 0xbacb0ffe marker)
-- Calls helper functions before/after release
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Releases render target and back buffer
-- ❌ Missing checks for special marker value
-- ❌ Missing DAT_00b95034 interface
-- ❌ Missing helper function calls
-
-**Action needed:**
-- Identify all DirectX interfaces that need release
-- Implement special marker logic (0xbacb0ffe)
-- Implement helper functions (thunk_FUN_00ec04dc, etc.)
-
-### 10. Cursor Management
-**Original (ARCHITECTURE.md):**
-- Uses ShowCursor in loops: `while (ShowCursor(1) < 1);`
-- Ensures cursor visibility level reaches target
-- Reference counting aware
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Uses ShowCursor loops correctly
-- ✅ Implements reference counting aware code
-
-**No action needed** ✓
-
-## Missing Global State
-
-### 11. Timing Variables
-**Original (ARCHITECTURE.md):**
-- Many 64-bit timing variables:
-  - DAT_00e6e5e0, DAT_00e6e5e4: Last frame time
-  - DAT_00c83198, DAT_00c8319c: Accumulated time
-  - DAT_00c831a8, DAT_00c831ac: Next callback time
-  - DAT_00c83190, DAT_00c83194: Callback interval
-  - DAT_008e1648: Frame flip flag
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ⚠️ Uses DWORD and ULONGLONG
-- ⚠️ May not match exact variable count
-- ❌ Missing frame flip flag
-- ❌ Missing callback interval/time variables
-
-**Action needed:**
-- Add missing timing variables
-- Ensure 64-bit variable usage matches original
-- Implement frame flip/toggle mechanism
-
-### 12. Focus and State Flags
-**Original (ARCHITECTURE.md):**
-- DAT_00bef6c5: Exit flag
-- DAT_008afbd9: Fullscreen mode
-- DAT_00bef6c7: Has focus
-- DAT_00bef67e: Cursor visibility state
-- DAT_00bef67c, DAT_00bef67d: Unknown flags
-- DAT_00bef6d8: Delayed op timer
-- DAT_00bef6d7: Game update enable flag
-- DAT_00bef6d4, DAT_00bef6d5: Unknown flags
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Has g_bExitRequested (exit flag)
-- ✅ Has bIsFullscreen
-- ✅ Has bHasFocus
-- ✅ Has g_dwDelayedOpTimer
-- ❌ Missing cursor visibility state flag
-- ❌ Missing unknown flags (may be important)
-- ❌ Missing game update enable flag
-
-**Action needed:**
-- Add all missing global flags
-- Investigate purpose of unknown flags
-- Ensure flag usage matches original logic
-
-### 13. DirectX Global Interfaces
-**Original (ARCHITECTURE.md):**
-- DAT_00bf1920: IDirect3DDevice9*
-- DAT_00bf1930: Back buffer
-- DAT_00bf1934: Render target/texture
-- DAT_00bf1938: Additional render target
-- DAT_00af1390: Cached surface pointer
-- DAT_00ae9250: Cached surface pointer
-- DAT_00b95034: Unknown DirectX interface
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Has g_pd3dDevice
-- ✅ Has g_pBackBuffer
-- ✅ Has g_pRenderTarget
-- ❌ Missing additional render target
-- ❌ Missing cached surface pointers
-- ❌ Missing unknown interface
-
-**Action needed:**
-- Add missing DirectX interface pointers
-- Implement caching mechanism
-
-## Missing Features
-
-### 14. Command Line Argument Processing
-**Original (ARCHITECTURE.md):**
-- Copies to DAT_00c82b88 and DAT_00c82d88
-- Length: 0x200 bytes each
-- Purpose unknown
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Has g_szCmdLine1 and g_szCmdLine2
-- ✅ Copies command line
-- ❌ Doesn't process/parse arguments
-
-**Action needed:**
-- Determine if arguments are parsed
-- Implement parsing logic if needed
-
-### 15. Registry Settings Completeness
-**Original (ARCHITECTURE.md):**
-- Reads: Width, BitDepth, ShadowLOD, MaxFarClip, ParticleRate
-- Potentially more settings not documented
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ✅ Reads documented settings
-- ✅ Adds Height setting
-- ❌ May be missing other settings
-
-**Action needed:**
-- Search for all registry reads in original
-- Implement any missing settings
-
-### 16. Error Handling and Logging
-**Original (ARCHITECTURE.md):**
-- FUN_0066f810: Fatal error function with message
-- Used for DirectInput acquire failures
-- Likely logs errors or shows message box
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- ❌ No error logging
-- ❌ No fatal error handling
-- ⚠️ Silent failures possible
-
-**Action needed:**
-- Implement error logging function
-- Add fatal error handling
-- Add message boxes for critical errors
-
-## Structural Differences
-
-### 17. Code Organization
-**Original (ARCHITECTURE.md):**
-- Functions at specific addresses
-- Global variables at fixed addresses
-- Complex interconnected call graph
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- Clean modular functions
-- Named global variables
-- Simplified call structure
-
-**Note:** This is expected - decompiled code is cleaner than compiled code
-
-### 18. Data Structures
-**Original (ARCHITECTURE.md):**
-- Complex C++ objects with vtables
-- std::string usage throughout
-- Multiple levels of indirection
-
-**C++ Decompilation (CPP-ARCHITECTURE.md):**
-- Simple C-style structures
-- Minimal std::string usage
-- Direct pointers
-
-**Action needed:**
-- Consider if C++ objects are necessary for functionality
-- May need class structures for DirectX interfaces
-
-## Summary
-
-### Critical Missing Implementations:
-1. DirectX initialization and device creation
-2. DirectInput initialization and device creation
-3. Game update logic and frame callbacks
-4. Multiple global state variables
-5. Error logging and fatal error handling
-
-### Minor Issues:
-1. SystemParams structure layout verification needed
-2. Some global flags missing
-3. Registry setting completeness check needed
-4. Exception handling consideration
-
-### Correctly Implemented:
-1. ✅ Window class registration and creation
-2. ✅ System parameter save/restore
-3. ✅ Window placement persistence
-4. ✅ Device lost recovery framework
-5. ✅ Input acquire/unacquire framework
-6. ✅ Frame timing with delta capping
-7. ✅ Registry read/write with fallback
-8. ✅ Main message loop structure
-9. ✅ Window procedure message handling
-10. ✅ Cursor management
-
-### Next Steps:
-The C++ decompilation provides a solid foundation with correct structure and many key features. The main work remaining is:
-1. Implement DirectX and DirectInput initialization
-2. Add missing global variables
-3. Implement game update callbacks
-4. Add error handling
-5. Fill in TODO sections
-6. Verify exact behavior matches original
-
-The architecture is sound and compilation successful. Further iteration will close the functional gaps.
+# Differences Between Original Binary and C++ Decompilation
+
+This document compares the architecture documented in `ARCHITECTURE.md` (from binary analysis)
+against the C++ reconstruction in `decompilation-src/` (described in `CPP-ARCHITECTURE.md`).
+Items marked **MISSING** represent gaps to address in the next iteration.
+
+---
+
+## 1. WinMain Initialization Sequence
+
+| Step | Original (`ARCHITECTURE.md`) | C++ (`main.cpp`) | Status |
+|------|------------------------------|-----------------|--------|
+| FPU config | `_control87(0x20000, 0x30000)` | `_control87(0x20000, 0x30000)` | OK |
+| System params | Save + disable mouse accel | `SaveOrRestoreSystemParameters(false)` | OK |
+| Cmdline copy | strncpy to two 512-byte buffers | strncpy to `g_szCmdLine1/2` | OK |
+| COM/thread init | `thunk_FUN_00eb787a()` before single-instance check | Not present | **MISSING** |
+| Single instance | `FindWindowA` → TerminateProcess | `FindWindowA` → TerminateProcess | OK |
+| Window class | `RegisterWindowClass()` | `RegisterWindowClass()` | OK |
+| Registry load | `LoadGameSettings()` | `LoadGameSettings()` | OK |
+| Cmdline parse | `fullscreen`, `widescreen` | `ParseCommandLineArg` for both | OK |
+| Window creation | `CreateGameWindow(hInstance, width, height)` — **2 args, no x/y** | `CreateGameWindow(hInstance, x, y, width, height)` — **4 args** | SIGNATURE DIFFERS |
+| DirectX init | `thunk_FUN_00eb612e(height)` | TODO comment | **MISSING** |
+| Game subsystems | `thunk_FUN_00eb496e()` | TODO comment | **MISSING** |
+| Window placement | Restore after subsystem init | Restore after window create, before MainLoop | ORDER DIFFERS |
+| Main loop | `MainLoop()` | `MainLoop()` | OK |
+| Render teardown | `thunk_FUN_00ec6610()` | TODO comment | **MISSING** |
+| COM release | Release `DAT_00bef6d0` | TODO comment | **MISSING** |
+| Input cleanup | `UnacquireInputDevices()` | `UnacquireInputDevices()` | OK |
+| Param restore | `SaveOrRestoreSystemParameters(true)` | `SaveOrRestoreSystemParameters(true)` | OK |
+| Hard exit | `TerminateProcess(hProc, 1)` | `TerminateProcess(hProc, 1)` | OK |
+
+**Key issue**: COM/thread initialization (`thunk_FUN_00eb787a`) happens before the single-instance check in the original but is absent from the C++ code. `CreateGameWindow` signature has extra x/y parameters not present in the original's 2-arg form.
+
+---
+
+## 2. Registry System
+
+| Aspect | Original | C++ | Status |
+|--------|----------|-----|--------|
+| HKCU → HKLM fallback | Yes | Yes | OK |
+| Auto-create in HKCU | Yes | Yes | OK |
+| `std::basic_string` internal use | Yes — uses C++ string objects internally | No — plain C strings | DIFFERS (implementation detail) |
+| HKCU write-back on HKLM hit | Original calls a helper (`FUN_0060cc70`) that creates the HKCU key | C++ returns value without HKCU write-back | **MISSING** |
+
+---
+
+## 3. System Parameter Management
+
+| Aspect | Original | C++ | Status |
+|--------|----------|-----|--------|
+| Storage layout | `mouseSpeed[2]`, `mouseAccel[2]`, `screenReader[6]` | Same struct layout | OK |
+| Get calls | `SPI_GETMOUSESPEED (0x3a)`, `SPI_GETMOUSE (0x34)`, `SPI_GETSCREENREADER (0x32)` | Same codes via globals.h constants | OK |
+| Set calls | `SPI_SETMOUSESPEED (0x3b)`, `SPI_SETMOUSE (0x35)`, `SPI_SETSCREENREADER (0x33)` | Same | OK |
+| Bit check | bit 0 clear = acceleration active | bit 0 clear = acceleration active | OK |
+| Mask | `0xFFFFFFF3` clears bits 2–3 | `MOUSE_ACCEL_FLAGS_MASK = 0xFFFFFFF3` | OK |
+
+---
+
+## 4. Window Creation
+
+| Aspect | Original | C++ | Status |
+|--------|----------|-----|--------|
+| Signature | `CreateGameWindow(hInstance, width, height)` | `CreateGameWindow(hInstance, x, y, width, height)` | EXTRA PARAMS |
+| Fullscreen style | `WS_POPUP` | `WS_POPUP` | OK |
+| Windowed style | `WS_OVERLAPPEDWINDOW` | `WS_OVERLAPPEDWINDOW` | OK |
+| TOPMOST | `HWND_TOPMOST` in fullscreen | `HWND_TOPMOST` in fullscreen | OK |
+| SetMenu | `SetMenu(hWnd, NULL)` in fullscreen | `SetMenu(hWnd, NULL)` | OK |
+| SetThreadExecutionState | `ES_CONTINUOUS \| ES_DISPLAY_REQUIRED` | Same | OK |
+| ShowWindow sequence | `ShowWindow(hWnd, 0)` then `SetWindowPos` | Same logic | OK |
+
+The original `CreateGameWindow` takes only `(hInstance, width, height)` — position comes from registry within the function. The C++ version takes x, y as parameters which is incorrect.
+
+---
+
+## 5. WindowProc / Message Handling
+
+| Message | Original | C++ | Status |
+|---------|----------|-----|--------|
+| `WM_DESTROY` | Show cursor + `PostQuitMessage(0)` | Same | OK |
+| `WM_SIZE/ERASEBKGND/ACTIVATEAPP` | Return 0 | Return 0 | OK |
+| `WM_ACTIVATE` focus-loss | PauseGraphicsState + UnacquireInputDevices + ... | UnacquireInputDevices + ... (PauseGraphicsState is TODO) | **MISSING** `PauseGraphicsState` |
+| `WM_ACTIVATE` focus-gain | Via `DAT_00e6b384+0xc` vtable for input acquire, then AcquireInputDevices | `AcquireInputDevices()` directly | MISSING vtable-based acquire |
+| `WM_ACTIVATE` focus-gain | Calls `thunk_FUN_00ea53ca()` (render pause) | Not present | **MISSING** |
+| `WM_SETFOCUS/SETCURSOR` | Calls `PauseGraphicsState()` on focus loss path | TODO comment | **MISSING** `PauseGraphicsState` |
+| `WM_SYSCOMMAND` | Blocks SC_MAXIMIZE/SIZE/MOVE/KEYMENU | Same | OK |
+| `WM_NCHITTEST` | `HTCLIENT` fullscreen | Same | OK |
+| `WM_ENTERMENULOOP` | Return `0x10000` | Same | OK |
+| `WM_WTSSESSION_CHANGE` | wParam 0/7 → 1, else -1 | Same | OK |
+| `WM_PAINT` | `ValidateRect` or `BeginPaint/EndPaint` | Same | OK |
+
+---
+
+## 6. Main Loop
+
+| Aspect | Original | C++ | Status |
+|--------|----------|-----|--------|
+| Exit condition | `DAT_00bef6c5` flag or `WM_QUIT` | `g_bExitRequested` or `WM_QUIT` | OK |
+| Focus-loss cursor handling | Calls `SwitchRenderOutputMode` with scene IDs | Just cursor show/hide, no `SwitchRenderOutputMode` | **MISSING** |
+| Frame budget computation | Complex `ROUND((accumHigh * k1 + accumLow) * k2 * k3)` | Simple `timeGetTime()` elapsed | SIMPLIFIED |
+| `GameFrameUpdate` | Called | Called | OK |
+| Memory allocator query | `QueryMemoryAllocatorMax()` tracks `g_nMinFreeMemory` | `g_nMinFreeMemory` declared but not updated | **MISSING** |
+| Delayed timer countdown | Subtracts from timer each frame | `timeGetTime()` delta subtracted | OK (approach differs) |
+| Resume audio on timer expiry | `thunk_FUN_00ec67e8()` | TODO comment | **MISSING** |
+| Resume game objects | `ResumeGameObjects()` | `ResumeGameObjects()` | OK |
+| Frame rate cap | `Sleep(0)` if under budget | `Sleep(0)` if under `TARGET_FRAME_TIME_MS` | OK |
+| WM_QUIT filter | filters `(UINT)-1` | filters `(UINT)-1` | OK |
+
+---
+
+## 7. Timing System
+
+| Aspect | Original | C++ | Status |
+|--------|----------|-----|--------|
+| `GetGameTime` | `timeGetDevCaps` + `timeBeginPeriod` + `timeGetTime` + `timeEndPeriod` | Same | OK |
+| Startup baseline | `_DAT_00e6e5e8` | `g_dwStartupTime` | OK |
+| 16.16 fixed-point conversion | `high = t >> 16`, `low = t << 16` (separate 32-bit halves) | `tFixed = (ULONGLONG)tMs << 16` (single 64-bit) | IMPLEMENTATION DIFFERS |
+| Delta cap | `0x640000` (100ms in 16.16) | `(ULONGLONG)MAX_DELTA_TIME_MS << 16` | OK |
+| Game ticks formula | `accum * 3 / 0x10000` | `(g_ullAccumTime * 3) / TIME_FIXED_SHIFT` | OK |
+| Primary callback | `UpdateFrameTimingPrimary + (*DAT_008e1644[0])(&local_4)` | TODO comment | **MISSING** |
+| Secondary callback | `InterpolateFrameTime + (*DAT_008e1644[1])()` | TODO comment | **MISSING** |
+| Timing double-buffer | `DAT_00c83170[flip*8]` stores tick/time | Not implemented | **MISSING** |
+
+The original uses **two separate 32-bit halves** for the 64-bit fixed-point value (`DAT_00e6e5e0` = low, `DAT_00e6e5e4` = high). The C++ uses a single `ULONGLONG`. This is functionally equivalent but differs structurally from the original.
+
+---
+
+## 8. DirectX Device Management
+
+| Aspect | Original | C++ | Status |
+|--------|----------|-----|--------|
+| `PreDeviceCheck()` before `TestCooperativeLevel` | Called | `GetAvailableTextureMem` inline (functional equivalent) | OK |
+| `TestCooperativeLevel` | vtable+0xc | Direct method call | OK |
+| Device lost sleep | 50ms | `DEVICE_LOST_SLEEP_MS (50)` | OK |
+| `D3DPRESENT_PARAMETERS` | Stored struct at `DAT_00b94af8` | Local struct created on demand | DIFFERS — original reuses saved params |
+| `ReleaseDirectXResources` pre-cleanup | `thunk_FUN_00ec04dc()` | Not present | **MISSING** |
+| `ReleaseDirectXResources` post-cleanup | `thunk_FUN_00ec19b5()` | Not present | **MISSING** |
+| `RestoreDirectXResources` first step | `InitRenderStates()` | TODO in comment | **MISSING** `InitRenderStates` |
+| GPU sync query | `CreateGPUSyncQuery()` if null | Not called in `RestoreDirectXResources` | **MISSING** |
+| AA sentinel | `0xbacb0ffe` | `D3D_AA_PATH_SENTINEL = 0xbacb0ffe` | OK |
+| `InitD3DStateDefaults` | Called at end of restore | TODO comment | **MISSING** |
+| `ReleaseDirectXResources` RT release | Gets back buffer from swap chain, calls `FUN_0067ecf0`, releases separately | Direct release of `g_pRenderTarget` | SIMPLIFIED |
+
+---
+
+## 9. DirectInput Management
+
+| Aspect | Original | C++ | Status |
+|--------|----------|-----|--------|
+| `AcquireInputDevices` | Also calls `Ordinal_5(0)` (custom hide cursor) | `ShowCursor(FALSE)` only | MINOR DIFFERS |
+| `UnacquireInputDevices` | Also calls `Ordinal_5(1)` | `ShowCursor(TRUE)` only | MINOR DIFFERS |
+| Fatal error on failure | `FUN_0066f810` called on acquire failure | No error checking | **MISSING** |
+| DirectInput init | `FUN_00688370(4, 0)` in `InitGameSubsystems` | Not implemented | **MISSING** |
+
+---
+
+## 10. Pause/Resume System
+
+| Aspect | Original | C++ | Status |
+|--------|----------|-----|--------|
+| Full pause | Triggers animation, calls vtable+0x24 on all systems, records pause time | State machine stub only | **MISSING** vtable calls |
+| Audio-only pause | Pauses `DAT_00c7c370` via vtable | State machine stub only | **MISSING** |
+| Full resume | Triggers animation, calls vtable+0x28 on all systems, records resume time | State machine stub only | **MISSING** vtable calls |
+| `PauseAudioManager` | Checks music loaded, calls `FUN_006a9ea0` | Empty stub | **MISSING** |
+| `ProcessDeferredCallbacks` | Processes linked list at `DAT_00bef7c0` within 2ms budget | Empty stub | **MISSING** |
+
+---
+
+## 11. Global Variable Mapping
+
+| Original address | C++ variable | Status |
+|-----------------|-------------|--------|
+| `DAT_00bef6cc` | `ghWnd` | OK |
+| `DAT_008afbd9` | `bIsFullscreen` | OK |
+| `DAT_00bef6c7` | `g_bHasFocusLost` | OK |
+| `DAT_00bef67e` | `g_bCursorVisible` | OK |
+| `DAT_00bef6d8` | `g_dwDelayedOpTimer` | OK |
+| `DAT_00bef6d7` | `g_bGameUpdateEnabled` | OK |
+| `DAT_00bef6d4` | `g_bAudioWasPaused` | OK |
+| `DAT_00bef6d5` | `g_bUpdatesWerePaused` | OK |
+| `DAT_00bf18aa` | `g_bDeviceLost` | OK |
+| `DAT_00c7b908` | `g_nPauseState` | OK |
+| `DAT_008afb08` | `g_nMinFreeMemory` | declared, **not updated** |
+| `DAT_00e6b384` | not present | **MISSING** |
+| `DAT_00bef6d0` | not present | **MISSING** |
+| `DAT_00bef6c5` | `g_bExitRequested` | OK |
+
+---
+
+## Summary: Priority Fixes for Next Iteration
+
+**High priority (functional correctness):**
+1. Add `thunk_FUN_00eb787a()` (COM/thread init) stub before single-instance check in WinMain
+2. Add `InitDirectXAndSubsystems(height)` and `InitGameSubsystems()` stub calls in WinMain
+3. Fix `CreateGameWindow` signature: remove `x, y` params; read position from registry inside the function
+4. Add `PauseGraphicsState()` TODO stubs in `WM_ACTIVATE` focus-loss and `WM_SETFOCUS`
+5. Add `thunk_FUN_00ea53ca()` (render pause) stub to `WM_ACTIVATE` both paths
+6. Add HKCU write-back when key found in HKLM (`ReadRegistrySetting`)
+7. Add `InitRenderStates()`, `CreateGPUSyncQuery()`, `InitD3DStateDefaults()` stub calls in `RestoreDirectXResources`
+8. Add `thunk_FUN_00ec04dc()` and `thunk_FUN_00ec19b5()` pre/post cleanup stubs in `ReleaseDirectXResources`
+9. Add frame callback dispatch stubs in `GameFrameUpdate` (primary + secondary)
+10. Add `SwitchRenderOutputMode` stub call in the focus-loss path of `MainLoop`
+11. Update `g_nMinFreeMemory` via `QueryMemoryAllocatorMax()` stub call in `MainLoop`
+12. Add `thunk_FUN_00ec67e8()` (resume audio) stub call on timer expiry in `MainLoop`
+
+**Medium priority (structural fidelity):**
+13. Add persistent `D3DPRESENT_PARAMETERS g_d3dpp` global (matching `DAT_00b94af8`)
+14. Add `g_pComObject` (IUnknown*) for `DAT_00bef6d0` — created in WinMain, released at exit
+15. Add vtable-based input acquire via game state object in focus-gain path of `WM_ACTIVATE`
+16. Move window placement restore to after `InitDirectXAndSubsystems` call (matching original order)
+
+**Low priority (implementation details):**
+17. `AcquireInputDevices`/`UnacquireInputDevices`: add `Ordinal_5` custom cursor call stubs
+18. Add error checking in `AcquireInputDevices` (fatal error on failure)
