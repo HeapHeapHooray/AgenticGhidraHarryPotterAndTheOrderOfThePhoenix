@@ -363,6 +363,15 @@ SIZE_T QueryMemoryAllocatorMax() {
     return 0; // TODO: implement allocator query
 }
 
+void CLI_CommandParser_ParseArgs() {
+    // FUN_00eb787a: Parses extended command-line arguments from g_szCmdLine1 into a
+    // CLI::CommandParser object (DAT_00e6b328, allocated 0xc bytes with tag "CLI::CommandParser").
+    // Stores up to 0x20 name pointers at this+0x480 and value pointers at this+0x500.
+    // Positional args at this+0x400.
+    // Additional flags processed here: -oldgen, -showfps, -memorylwm, -nofmv.
+    // TODO: AllocEngineObject(0xc, "CLI::CommandParser") and parse g_szCmdLine1
+}
+
 void PreDirectXInit() {
     // thunk_FUN_00ec64f9: Sets up audio/render context before D3D device creation.
     // Stores DAT_00bef6d0 (engine object) into DAT_00bf1b18 (audio subsystem reference).
@@ -394,10 +403,16 @@ void SaveOptionsOnExit() {
     // thunk_FUN_00eb4a5d: Writes user-modified settings back to registry on exit.
     // Saves OptionResolution (DAT_00bf197c), OptionLOD (DAT_008ae1ec),
     // OptionBrightness (DAT_008ae1f0) via WriteRegistrySetting integer helper (FUN_0060cc70).
-    // Called in WinMain cleanup after RenderAndAudioTeardown.
-    // TODO: WriteRegistrySetting("Harry Potter...", "GameSettings", "OptionResolution", g_gfxSettings.optionResolution);
-    // TODO: WriteRegistrySetting("Harry Potter...", "GameSettings", "OptionLOD", g_gfxSettings.optionLOD);
-    // TODO: WriteRegistrySetting("Harry Potter...", "GameSettings", "OptionBrightness", g_gfxSettings.optionBrightness);
+    // Original uses std::basic_string for the key/section names internally.
+    static const char* kApp     = "Harry Potter and the Order of the Phoenix";
+    static const char* kSection = "GameSettings";
+    char buf[32];
+    sprintf(buf, "%d", g_gfxSettings.optionResolution);
+    WriteRegistrySetting(kApp, kSection, "OptionResolution", buf);
+    sprintf(buf, "%d", g_gfxSettings.optionLOD);
+    WriteRegistrySetting(kApp, kSection, "OptionLOD", buf);
+    sprintf(buf, "%d", g_gfxSettings.optionBrightness);
+    WriteRegistrySetting(kApp, kSection, "OptionBrightness", buf);
 }
 
 void UpdateCursorVisibilityAndScene() {
@@ -530,6 +545,16 @@ void AcquireInputDevices() {
 // These are stubs; the real implementations are complex state machines that
 // interact with game object lists.
 
+void AudioStream_Resume() {
+    // thunk_FUN_00ec67e8: Resumes the active audio stream after a focus-loss pause.
+    // Uses in_EAX (non-standard calling convention) as the audio stream/track object:
+    //   this+0x28 = pause flag → clear to 0
+    //   this+0x16/17 = pause timestamp / cumulative playback time (updated)
+    //   Calls thunk_FUN_00ec693d(0x1000) (decoder speed), thunk_FUN_00ec66f1() (flush)
+    //   Pitch correction: if pitch == 0x1000, add elapsed directly; else scale by pitch/0x1000
+    // TODO: call on active audio track object
+}
+
 void PauseAudioManager() {
     // Original: checks if a music track is loaded, then calls FUN_006a9ea0()
     // to pause the audio stream.
@@ -629,13 +654,17 @@ void GameFrameUpdate() {
         // Store current timing in the double-buffer at DAT_00c83170[flip*8].
         // TODO: DAT_00c83170[g_nFrameFlip * 2] = g_dwGameTicks; (timing double-buffer)
 
-        // Primary callback: UpdateFrameTimingPrimary (updates timing double buffer + tick counter)
+        // Primary callback: UpdateFrameTimingPrimary (FUN_00617f50).
+        // Stores tick/time in DAT_00c83128/c83120 double-buffer indexed by flip.
+        // Increments DAT_00c83114 tick counter. Then fires (*DAT_008e1644[0])(&localTick).
         // TODO: UpdateFrameTimingPrimary(&g_dwGameTicks);
-        // TODO: (*callback_table[0])(&g_dwGameTicks);  // DAT_008e1644[0]
+        // TODO: (*DAT_008e1644[0])(&g_dwGameTicks);
 
-        // Secondary callback: InterpolateFrameTime + dispatch to render listeners
+        // Secondary callback: InterpolateFrameTime (FUN_00617ee0) — smooth frame interpolation.
+        // Computes t = (curr-prev)/(curr-prev) between double-buffered timing values.
+        // Then fires (*DAT_008e1644[1])() — dispatches to render listener list.
         // TODO: InterpolateFrameTime();
-        // TODO: (*callback_table[1])();               // DAT_008e1644[1]
+        // TODO: (*DAT_008e1644[1])();
     }
 }
 
@@ -646,10 +675,17 @@ BOOL RegisterWindowClass(HINSTANCE hInstance) {
     UnregisterClassA("OrderOfThePhoenixMainWndClass", hInstance);
 
     WNDCLASSA wc = {0};
-    wc.style         = CS_DBLCLKS | CS_OWNDC | CS_VREDRAW | CS_HREDRAW;
+    // Original: fullscreen uses CS_OWNDC | CS_DBLCLKS (0x2020);
+    //           windowed also adds CS_VREDRAW | CS_HREDRAW.
+    if (bIsFullscreen) {
+        wc.style = CS_OWNDC | CS_DBLCLKS;
+        // Fullscreen: no default cursor (cursor hidden; game manages it via D3D)
+    } else {
+        wc.style  = CS_DBLCLKS | CS_OWNDC | CS_VREDRAW | CS_HREDRAW;
+        wc.hCursor = LoadCursorA(NULL, IDC_ARROW);
+    }
     wc.lpfnWndProc   = WindowProc;
     wc.hInstance     = hInstance;
-    wc.hCursor       = LoadCursorA(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wc.lpszClassName = "OrderOfThePhoenixMainWndClass";
 
@@ -745,8 +781,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                     g_bHasFocusLost = true;
 
                     // (2) Update cursor state and dispatch render scene switch
-                    // Original: UpdateCursorVisibilityAndScene() with AL = 1 (cursor shown)
-                    // TODO: UpdateCursorVisibilityAndScene() — passes cursor-visible=true
+                    // Original: UpdateCursorVisibilityAndScene() called with AL=1 (cursor shown = focus lost).
+                    g_bCursorVisible = true;
+                    UpdateCursorVisibilityAndScene();
 
                     // (3) If delayed-op timer is not already running, queue pauses
                     if (g_dwDelayedOpTimer == 0) {
@@ -761,14 +798,15 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                     g_dwDelayedOpTimer = 0;
                 } else {
                     // Window gaining focus ────────────────────────────────────
-                    // Original: acquires input via game state object vtable at DAT_00e6b384+0xc
+                    // Original: acquires input via RealInputSystem (DAT_00e6b384) at vtable+0xc,
                     // then calls AcquireInputDevices().
-                    // TODO: (*((DAT_00e6b384+0xc)->vtable[...]))() — device acquire via game obj
+                    // TODO: (*((RealInputSystem+0xc)->vtable[0x10/0x218]))() — device acquire via game obj
                     AcquireInputDevices();
                     while (ShowCursor(FALSE) >= 0);
                     // Update cursor state and dispatch render scene switch
-                    // Original: UpdateCursorVisibilityAndScene() with AL = 0 (cursor hidden)
-                    // TODO: UpdateCursorVisibilityAndScene() — passes cursor-visible=false
+                    // Original: UpdateCursorVisibilityAndScene() called with AL=0 (cursor hidden = focus gained).
+                    g_bCursorVisible = false;
+                    UpdateCursorVisibilityAndScene();
                     g_bHasFocusLost = false;
                     g_dwDelayedOpTimer = FOCUS_CHANGE_DELAY_MS;
                 }
@@ -911,8 +949,9 @@ void MainLoop() {
 
                     // Resume audio if it was paused on focus loss
                     if (g_bAudioWasPaused) {
-                        // thunk_FUN_00ec67e8(): resumes audio stream after focus-loss pause
-                        // TODO: thunk_FUN_00ec67e8()
+                        // AudioStream_Resume() (thunk_FUN_00ec67e8): resumes audio stream.
+                        // Uses in_EAX as this; sets pause flag, restores pitch, calls decoder.
+                        AudioStream_Resume();
                     }
 
                     // Resume game objects/physics
@@ -952,7 +991,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     // CLI command-line argument parsing: CLI_CommandParser_ParseArgs() (FUN_00eb787a).
     // Parses "-name=value" tokens from the command line into a CLI::CommandParser object.
     // Called before single-instance check. NOT COM init (previously misidentified).
-    // TODO: CLI_CommandParser_ParseArgs()
+    // Allocates CLI::CommandParser (0xc bytes, tag "CLI::CommandParser") at DAT_00e6b328.
+    // Stores up to 0x20 name/value pairs (at this+0x480 / this+0x500).
+    CLI_CommandParser_ParseArgs();
 
     // Single-instance guard: terminate if another instance is already running
     if (FindWindowA("OrderOfThePhoenixMainWndClass", NULL) != NULL) {
@@ -1008,6 +1049,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         TerminateProcess(GetCurrentProcess(), 0);
         return 0;
     }
+
+    // Engine object factory: creates the main engine sub-object (DAT_00bef6d0).
+    // Original: GetOrInitCallbackManager() → calls factory via callback system vtable
+    // with size=0xb58 (2904 bytes) and magic {0x88332000000001, 0}; result in DAT_00bef6d0.
+    // Released at exit via (**(callback_mgr + 0xc))(DAT_00bef6d0, 0).
+    // TODO: g_pComObject = GetOrInitCallbackManager().CreateEngineObject(0xb58, ...)
 
     // Pre-DirectX init: sets up audio/render context (thunk_FUN_00ec64f9).
     // Passes engine object to audio subsystem, creates audio output context.

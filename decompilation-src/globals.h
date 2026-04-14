@@ -124,6 +124,9 @@ void MainLoop();
 BOOL RegisterWindowClass(HINSTANCE hInstance);
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
+// CLI command parser (called before single-instance guard in WinMain)
+void CLI_CommandParser_ParseArgs();            // FUN_00eb787a — parses -name=value tokens
+
 // System and initialization
 void SaveOrRestoreSystemParameters(bool restore);
 void LoadGameSettings();
@@ -160,6 +163,9 @@ SIZE_T QueryMemoryAllocatorMax();          // thunk_FUN_00eb6dbc — returns lar
 // DirectInput functions
 void UnacquireInputDevices();
 void AcquireInputDevices();
+
+// Audio stream resume (called on delayed-timer expiry after focus regain)
+void AudioStream_Resume();             // thunk_FUN_00ec67e8 — resumes audio after focus-loss pause
 
 // Game frame and timing
 void GameFrameUpdate();
