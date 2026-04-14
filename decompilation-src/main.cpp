@@ -52,6 +52,7 @@ bool  g_bUpdatesWerePaused = false;
 bool  g_bDeviceLost        = false;
 int   g_nPauseState        = 0;
 SIZE_T g_nMinFreeMemory    = ~(SIZE_T)0;
+bool  g_bSubsysInitialized = false;
 
 char g_szCmdLine1[CMDLINE_BUFFER_SIZE] = {0};
 char g_szCmdLine2[CMDLINE_BUFFER_SIZE] = {0};
@@ -362,10 +363,22 @@ SIZE_T QueryMemoryAllocatorMax() {
     return 0; // TODO: implement allocator query
 }
 
+void PreDirectXInit() {
+    // thunk_FUN_00ec64f9: Sets up audio/render context before D3D device creation.
+    // Stores DAT_00bef6d0 (engine object) into DAT_00bf1b18 (audio subsystem reference).
+    // Clears audio-present flag DAT_00bf1b10 (set non-zero by FUN_006ac0b0/hardware detect).
+    // Copies audio device string into DAT_00be93d0.
+    // Creates audio output context DAT_00bf1b1c via thunk_FUN_00ec72a9.
+    // Sets DAT_00bf1b14 = 1 (audio pre-init flag).
+    // TODO: FUN_006ac0b0(), thunk_FUN_00ec6e91() (audio hardware detection)
+    // TODO: DAT_00bf1b1c = thunk_FUN_00ec72a9()
+}
+
 void InitDirectXAndSubsystems(int height) {
-    // thunk_FUN_00eb612e: Creates D3D device (FUN_00614370), additional graphics
-    // init (FUN_0060c2e0), finalizes device (FUN_006147f0), DirectInput init.
-    // Sets subsystem state flags DAT_008df65a=1, DAT_00aeea5c=2.
+    // thunk_FUN_00eb612e: Creates D3D device (InitCLIAndTimingAndDevice),
+    // engine objects (InitEngineObjects), registers message handlers (FinalizeDeviceSetup),
+    // initializes audio subsystem (InitAudioSubsystem).
+    // Sets DAT_008df65a=1, DAT_00aeea5c=2.
     // TODO: implement
     (void)height;
 }
@@ -373,7 +386,30 @@ void InitDirectXAndSubsystems(int height) {
 void InitGameSubsystems() {
     // thunk_FUN_00eb496e: Registers frame callbacks, enumerates DirectInput
     // devices (FUN_00688370(4,0)), loads language selection screen.
+    // Sets DAT_00bef6c6 = 1 (subsystem initialized flag).
     // TODO: implement
+}
+
+void SaveOptionsOnExit() {
+    // thunk_FUN_00eb4a5d: Writes user-modified settings back to registry on exit.
+    // Saves OptionResolution (DAT_00bf197c), OptionLOD (DAT_008ae1ec),
+    // OptionBrightness (DAT_008ae1f0) via WriteRegistrySetting integer helper (FUN_0060cc70).
+    // Called in WinMain cleanup after RenderAndAudioTeardown.
+    // TODO: WriteRegistrySetting("Harry Potter...", "GameSettings", "OptionResolution", g_gfxSettings.optionResolution);
+    // TODO: WriteRegistrySetting("Harry Potter...", "GameSettings", "OptionLOD", g_gfxSettings.optionLOD);
+    // TODO: WriteRegistrySetting("Harry Potter...", "GameSettings", "OptionBrightness", g_gfxSettings.optionBrightness);
+}
+
+void UpdateCursorVisibilityAndScene() {
+    // FUN_00ea53ca: Compares the requested cursor-visible state with the cached
+    // g_bCursorVisible (DAT_00bef67e). If they differ, dispatches a render mode change:
+    //   cursor=false (focus gained): SwitchRenderOutputMode(&DAT_00c82b08)
+    //   cursor=true  (focus lost):  SwitchRenderOutputMode(&DAT_00c82b00)
+    // State updates: DAT_00bef67c, DAT_00bef67d are also checked (additional conditions).
+    // The actual state is passed in AL (EAX low byte) — the new cursor-visible flag.
+    // This stub passes the current g_bCursorVisible as the desired new state.
+    // TODO: implement SwitchRenderOutputMode dispatch
+    (void)SwitchRenderOutputMode;  // suppress unused warning
 }
 
 void RestoreDirectXResources() {
@@ -708,8 +744,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                     while (ShowCursor(TRUE) < 1);
                     g_bHasFocusLost = true;
 
-                    // (2) Render pause (thunk_FUN_00ea53ca — pauses render pipeline)
-                    // TODO: thunk_FUN_00ea53ca()
+                    // (2) Update cursor state and dispatch render scene switch
+                    // Original: UpdateCursorVisibilityAndScene() with AL = 1 (cursor shown)
+                    // TODO: UpdateCursorVisibilityAndScene() — passes cursor-visible=true
 
                     // (3) If delayed-op timer is not already running, queue pauses
                     if (g_dwDelayedOpTimer == 0) {
@@ -729,8 +766,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                     // TODO: (*((DAT_00e6b384+0xc)->vtable[...]))() — device acquire via game obj
                     AcquireInputDevices();
                     while (ShowCursor(FALSE) >= 0);
-                    // (render resume — thunk_FUN_00ea53ca also called on gain)
-                    // TODO: thunk_FUN_00ea53ca()
+                    // Update cursor state and dispatch render scene switch
+                    // Original: UpdateCursorVisibilityAndScene() with AL = 0 (cursor hidden)
+                    // TODO: UpdateCursorVisibilityAndScene() — passes cursor-visible=false
                     g_bHasFocusLost = false;
                     g_dwDelayedOpTimer = FOCUS_CHANGE_DELAY_MS;
                 }
@@ -911,9 +949,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     strncpy(g_szCmdLine1, lpCmdLine, sizeof(g_szCmdLine1) - 1);
     strncpy(g_szCmdLine2, lpCmdLine, sizeof(g_szCmdLine2) - 1);
 
-    // COM/thread initialization (thunk_FUN_00eb787a — likely CoInitialize or thread pool setup).
-    // Called before single-instance check in the original.
-    // TODO: thunk_FUN_00eb787a()
+    // CLI command-line argument parsing: CLI_CommandParser_ParseArgs() (FUN_00eb787a).
+    // Parses "-name=value" tokens from the command line into a CLI::CommandParser object.
+    // Called before single-instance check. NOT COM init (previously misidentified).
+    // TODO: CLI_CommandParser_ParseArgs()
 
     // Single-instance guard: terminate if another instance is already running
     if (FindWindowA("OrderOfThePhoenixMainWndClass", NULL) != NULL) {
@@ -970,15 +1009,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         return 0;
     }
 
-    UpdateWindow(ghWnd);
+    // Pre-DirectX init: sets up audio/render context (thunk_FUN_00ec64f9).
+    // Passes engine object to audio subsystem, creates audio output context.
+    // Must be called BEFORE InitDirectXAndSubsystems.
+    PreDirectXInit();
 
-    // Initialize DirectX device and core engine subsystems.
-    // Matching original: this is called before window placement restore.
-    InitDirectXAndSubsystems(winH);  // thunk_FUN_00eb612e
-    InitGameSubsystems();            // thunk_FUN_00eb496e
+    // Initialize DirectX device and core engine subsystems (thunk_FUN_00eb612e).
+    // Called with actual client height from GetClientRect.
+    RECT clientRect = {0};
+    GetClientRect(ghWnd, &clientRect);
+    int clientHeight = clientRect.bottom - clientRect.top;
+    InitDirectXAndSubsystems(clientHeight);
+
+    // Game subsystem init (thunk_FUN_00eb496e): registers callbacks, enumerates devices,
+    // loads language selection screen. Sets g_bSubsysInitialized = true.
+    InitGameSubsystems();
+    g_bSubsysInitialized = true;  // DAT_00bef6c6 = 1
 
     // Restore maximized/minimized state in windowed mode.
-    // Original restores placement after subsystem init.
+    // Original uses SW_MAXIMIZE=3 and SW_MINIMIZE=6 (checked from std::basic_string "true" compare).
     if (!bIsFullscreen) {
         char maximized[POSITION_BUFFER_SIZE];
         char minimized[POSITION_BUFFER_SIZE];
@@ -986,30 +1035,50 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         ReadRegistrySettingStr(kApp, kSection, "Minimized", "false", minimized, sizeof(minimized));
 
         if (strcmp(maximized, "true") == 0) {
-            ShowWindow(ghWnd, SW_MAXIMIZE);
+            ShowWindow(ghWnd, SW_MAXIMIZE);   // = 3
         } else if (strcmp(minimized, "true") == 0) {
-            ShowWindow(ghWnd, SW_MINIMIZE);
+            ShowWindow(ghWnd, SW_MINIMIZE);   // = 6 (original uses 6, not SW_SHOWMINIMIZED=2)
         } else {
             ShowWindow(ghWnd, nShowCmd);
         }
     }
+
+    // UpdateWindow forces an immediate WM_PAINT before entering the main loop.
+    UpdateWindow(ghWnd);
 
     // Enter main game loop
     MainLoop();
 
     // Cleanup ─────────────────────────────────────────────────────────────────
 
-    // Render teardown (thunk_FUN_00ec6610 — releases render pipeline resources)
-    // TODO: thunk_FUN_00ec6610()
+    // Render+audio teardown: releases audio/render resources (RenderAndAudioTeardown,
+    // thunk_FUN_00ec6610). Stops audio threads, closes handles.
+    // TODO: RenderAndAudioTeardown()
 
-    // Release COM object created in WinMain (DAT_00bef6d0)
+    // Release engine object DAT_00bef6d0 via callback manager destructor.
+    // Original: (**(callback_mgr + 0xc))(DAT_00bef6d0, 0)
+    // This is NOT a COM vtable release — it goes through the callback system.
     if (g_pComObject) {
-        g_pComObject->Release();
+        // TODO: (**(code**)(GetOrInitCallbackManager() + 0xc))(g_pComObject, 0)
         g_pComObject = NULL;
     }
 
+    // Save option settings back to registry before exit (SaveOptionsOnExit, thunk_FUN_00eb4a5d).
+    // Writes OptionResolution, OptionLOD, OptionBrightness.
+    SaveOptionsOnExit();
+
+    // Pause input via RealInputSystem vtable (mirrors PauseGraphicsState logic).
+    // Original calls vtable on DAT_00e6b384 (RealInputSystem) to pause the input device.
+    // TODO: if (g_pRealInputSystem && g_pRealInputSystem->subObj) { (*vtable[...])(); }
+
     UnacquireInputDevices();
+
+    // Show cursor and mark as lost focus
     while (ShowCursor(TRUE) < 1);
+    g_bHasFocusLost = true;
+
+    // Signal cursor state change and switch render scene (UpdateCursorVisibilityAndScene).
+    UpdateCursorVisibilityAndScene();
 
     // Restore system parameters (mouse acceleration etc.)
     SaveOrRestoreSystemParameters(true);

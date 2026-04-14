@@ -128,9 +128,11 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 void SaveOrRestoreSystemParameters(bool restore);
 void LoadGameSettings();
 void SaveWindowPlacement(HWND hWnd);
+void SaveOptionsOnExit();                  // thunk_FUN_00eb4a5d — writes OptionResolution/LOD/Brightness to registry
 bool ParseCommandLineArg(const char* cmdLine, const char* flag, const char** valueOut);
 
 // DirectX subsystem init (called from WinMain after window creation)
+void PreDirectXInit();                     // thunk_FUN_00ec64f9 — audio/render context setup (before DirectX)
 void InitDirectXAndSubsystems(int height); // thunk_FUN_00eb612e — creates D3D device + DirectInput
 void InitGameSubsystems();                 // thunk_FUN_00eb496e — registers callbacks, loads language screen
 
@@ -141,7 +143,13 @@ void RestoreDirectXResources();
 void InitRenderStates();                   // FUN_00675950 — uploads shaders, sets initial render states
 void CreateGPUSyncQuery();                 // FUN_0067b820 — creates D3DQUERYTYPE_EVENT sync query
 void InitD3DStateDefaults();               // FUN_00674430 — initializes render/sampler/texture stage defaults
-void PauseGraphicsState();                 // FUN_00617b60 — pauses render output on focus loss
+void PauseGraphicsState();                 // FUN_00617b60 — pauses input via RealInputSystem vtable on focus loss
+
+// Cursor state and render scene switch (thunk_FUN_00ea53ca):
+// Compares new visible state with cached g_bCursorVisible; if changed,
+// calls SwitchRenderOutputMode on the appropriate scene list.
+// Called on WM_ACTIVATE and in WinMain cleanup.
+void UpdateCursorVisibilityAndScene();     // FUN_00ea53ca
 
 // Render mode switching
 void SwitchRenderOutputMode();             // FUN_00612530 — dispatches to render listener list
@@ -219,6 +227,7 @@ extern bool          g_bUpdatesWerePaused;  // DAT_00bef6d5
 extern bool          g_bDeviceLost;         // DAT_00bf18aa
 extern int           g_nPauseState;         // DAT_00c7b908
 extern SIZE_T        g_nMinFreeMemory;       // DAT_008afb08 low-water mark
+extern bool          g_bSubsysInitialized;  // DAT_00bef6c6 — set to 1 after InitGameSubsystems
 extern char          g_szCmdLine1[CMDLINE_BUFFER_SIZE];
 extern char          g_szCmdLine2[CMDLINE_BUFFER_SIZE];
 
