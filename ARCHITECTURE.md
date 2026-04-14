@@ -517,3 +517,330 @@ Called on exit before input cleanup:
 - **Audio**: Async init, pause on focus loss, 2-second delayed resume, pitch-corrected seek on resume
 - **Message Loop**: Integrated with game update, frame limiter, deferred callback queue
 - **Engine Objects**: Allocator with debug tags, message handler registration, CLI CommandParser
+
+---
+# Iteration 4: Enhanced Understanding (Answers from Pattern Analysis)
+
+This section addresses questions from QUESTIONS.md through pattern analysis and architectural inference.
+
+## Engine Object Factory (DAT_00bef6d0)
+
+### Creation and Purpose
+The engine object (`DAT_00bef6d0`) is created via the callback manager's secondary factory entry:
+```
+(*DAT_00e6e874[0])(0xb58, {0x88332000000001, 0})
+```
+
+**Key observations:**
+- Size: 2904 bytes (0xb58)
+- Magic number `{0x88332000000001, 0}` is likely a type identifier for the factory
+- Released via custom destructor: `(*(callback_mgr + 0xc))(DAT_00bef6d0, 0)` — NOT a simple COM Release
+- Passed to audio/render subsystem in `PreDirectXInit` (copied to `DAT_00bf1b18`)
+
+**Architectural role:**
+This is the **main game engine object/context** that coordinates all subsystems. It acts as a central coordinator rather than a simple allocator, integrating:
+- Frame callback dispatch
+- Subsystem lifecycle management
+- Resource pooling and coordination
+
+### Factory Pattern
+The callback manager (`DAT_00e6e870`) provides a dual-entry factory:
+- **Primary entry** (`DAT_00e6e870`): Frame callback processing
+- **Secondary entry** (`DAT_00e6e874`): Object factory for engine subsystems
+
+This separation suggests a **capability-based architecture** where the same manager provides both event dispatch and object creation.
+
+## DirectX Initialization Details
+
+### CreateD3DDevice (`FUN_0067c290`)
+Parameters: `(clientHeight, ?, flags?, quality_params...)`
+```
+FUN_0067c290(height, ?, 0, 0, 6, 1, 1, 1, 1)
+```
+
+**Analysis:**
+- `height`: Client area height from `GetClientRect`
+- Parameter 6: Likely default quality/feature level (correlates with `DAT_00bf1994` shader capability index)
+- Trailing 1's: Boolean flags for various features (vsync, hardware acceleration, etc.)
+
+**Creates:**
+- `DAT_00bf1920` = `IDirect3DDevice9*`
+- `DAT_00bf1924` = `IDirect3D9*` or swap chain object
+
+**Error handling:**
+- Returns D3DERR-like codes
+- Special handling for `D3DERR_DEVICELOST` (`-0x7fffbffb`) during init → calls `ShowCursor(1)`
+
+### Resource Management Pre/Post Cleanup (`thunk_FUN_00ec04dc` / `thunk_FUN_00ec19b5`)
+
+These functions implement a **protocol pattern** around D3D device Reset:
+
+**Pre-release cleanup** (`thunk_FUN_00ec04dc`):
+- Called BEFORE surface releases in `ReleaseDirectXResources`
+- **Likely operations:**
+  - Flushes pending draw calls
+  - Clears command buffers
+  - Notifies render pipeline of impending resource loss
+- **Purpose:** Ensures clean state before resource destruction
+
+**Post-release cleanup** (`thunk_FUN_00ec19b5`):
+- Called AFTER all surface releases
+- **Likely operations:**
+  - Clears texture caches
+  - Resets shader state tracking
+  - Cleans up dependent resources
+- **Purpose:** Finalizes cleanup and prepares for restore
+
+This pre/post pattern is a **lifecycle hook system** ensuring render subsystems properly handle device loss/reset.
+
+## Audio Subsystem Architecture
+
+### Asynchronous Initialization Pattern
+
+The audio system uses **async command queuing with polling**:
+
+**Command queue:** `DAT_00be82ac`  
+**Status polling:** `AudioPollGate` (`FUN_006109d0`)
+- Returns: `-2` (error), `0` (pending), `1` (complete)
+- Polled in `SleepEx(0, 1)` loops during init
+
+**Init sequence in `InitAudioSubsystem`:**
+1. `FUN_006a9080()` — Open device (async)
+2. `FUN_006a91a0()` — Query format/caps (async, expects `0x80` = success)
+3. `FUN_006a9140(device, 0)` — Configure output (async)
+4. `FUN_006a90e0()` — Start stream
+
+Each operation pushes a command to the queue and polls until complete.
+
+**Why async?**
+- Non-blocking initialization (game can show loading screen)
+- Graceful degradation if audio hardware is slow/problematic
+- Allows timeout and retry logic
+
+### Audio Stream Control
+
+**Decoder state control** (`thunk_FUN_00ec693d`):
+- Parameter `0` = pause (stop playback)
+- Parameter `0x1000` = resume (normal pitch/rate = 100%)
+- **Likely:** `IDirectSoundBuffer::SetFrequency` or codec control
+
+**State finalization** (`thunk_FUN_00ec66f1`):
+- Called after state change in both pause and resume
+- **Likely:** Commits buffer changes, flushes hardware
+
+**Teardown sequence** (three-step pattern in `RenderAndAudioTeardown`):
+1. `FUN_006ace30()` — Stop all active streams/tracks
+2. `FUN_006108c0()` — Release DirectSound buffers
+3. `FUN_006ac930()` — Close device and release interfaces
+
+**Hardware detection flag** (`DAT_00bf1b10`):
+- Set to `0` in `PreDirectXInit`
+- Set non-zero by hardware detection (`FUN_006ac0b0` / `thunk_FUN_00ec6e91`)
+- Gates all audio init; if `0` = no audio (headless/server mode)
+
+## Message Dispatch System
+
+### String-Based Polymorphic Dispatch (`RegisterMessageHandler` `00eb59ce`)
+
+**Registration signature:**
+```
+RegisterMessageHandler(dest_object, msgName_string, paramType)
+```
+
+**Message names:**
+- `"iMsgDeleteEventHandler"`, `"iMsgDeleteEntity"`, `"iMsgOnDeleteEntity"`
+- `"iMsgDoRender"`, `"iMsgDoRenderDirectorsCamera"`, `"iMsgPreShowRaster"`
+- `"iMsgStartSystem"`, `"iMsgStopSystem"`
+
+**Architecture:**
+1. **Registration:** String name → hash to msgID → store `(msgID, handler_func, dest_object)` in dispatch table
+2. **Runtime dispatch:** Lookup by msgID, call `handler(dest_object, params)` with dest as `this` pointer
+3. **"iMsg" prefix:** Suggests interface messages (polymorphic dispatch across different object types)
+
+**Benefits:**
+- Decouples senders from receivers
+- Enables data-driven message routing
+- Supports dynamic handler registration (modding, plugins)
+
+### Frame Callback Registration
+
+**Function:** `FUN_0060c130` — registered as `DAT_00e69ca0`  
+**Called:** Every frame as part of callback chain
+
+**Purpose:** Main game logic update entry point
+- Processes game state updates
+- Manages entity updates
+- Coordinates AI ticks
+- **This is the primary "game code" hook**
+
+## Scene and Render Mode System
+
+### Scene IDs and Transitions
+
+**Three scene ID globals:**
+- `DAT_00c82b00` (`g_SceneID_FocusLost`) — Scene for focus-lost state (likely menu/pause screen)
+- `DAT_00c82b08` (`g_SceneID_FocusGain`) — Scene for focus-gained state (likely active gameplay)
+- `DAT_00c82ac8` (`g_SceneID_Current`) — Current/target active scene
+
+**Initialization:** All set to `0` at startup, populated during scene loading after `InitGameSubsystems`
+
+**Proposed enum:**
+```cpp
+enum SceneType {
+    SCENE_NONE = 0,
+    SCENE_MENU = 1,
+    SCENE_GAMEPLAY = 2,
+    SCENE_CUTSCENE = 3,
+    SCENE_LOADING = 4,
+    // etc.
+};
+```
+
+**Scene switching:**
+- `UpdateCursorVisibilityAndScene` compares focus-lost/focus-gain IDs vs current
+- If different, calls `SwitchRenderOutputMode` with appropriate scene pointer
+- `SwitchRenderOutputMode` dispatches to registered listeners
+
+**Deferred listener flush** (`FUN_006125a0`):
+- Called when `list.head+0x12` pending-change flag is set
+- Processes queued scene transition callbacks
+- Supports async scene loading coordination
+
+## Timing System Details
+
+### Callback Interval Initialization
+
+**Globals:** `DAT_00c83190/94` (`g_ullCallbackInterval_lo/hi`)
+
+**Likely initialized:**
+- In `InitFrameCallbackSystem` or first `GameFrameUpdate` call
+- **Default value speculation:**
+  - 60 FPS: `16ms << 16 = 0x100000` (16.16 fixed-point)
+  - 30 FPS: `33ms << 16 = 0x210000`
+
+**Usage:** Set once at startup, used throughout for frame pacing
+
+### TimeManager Pause Control
+
+**Structure:** `DAT_00bef768` = `TimeManager::Instance` (8 bytes)
+```
++0: vtable pointer
++4: isPaused flag
+```
+
+**Pause behavior:**
+- Checked in `UpdateFrameTimingPrimary`: `if (*(DAT_00bef768 + 4) == 0)`
+  - `0` = running → updates `DAT_00c83114` tick counter
+  - non-zero = paused → time advances but ticks don't accumulate
+
+**Purpose:** Allows pause menu / cinematics to freeze game logic while keeping frame timing active
+
+## Deferred Rendering Queue
+
+### Batch Processing (`ProcessDeferredCallbacks` / `BuildRenderBatch`)
+
+**Queue structure:**
+- Linked list at `DAT_00bef7c0`
+- Each node: draw call descriptor; next pointer at `node+0x7c`
+- Processed within 2ms budget per frame
+
+**Node types (recognized shader types):**
+- `BLOOM` — Post-processing bloom effect batches
+- `GLASS` — Transparent/refractive material batches
+- `BACKDROP` — Environment/skybox batches
+
+**Processing:**
+1. `ProcessDeferredCallbacks` iterates list
+2. For each node: calls `BuildRenderBatch(node)`
+3. `BuildRenderBatch` returns `1` when node complete → remove from list
+4. Continues until 2ms budget exhausted or list empty
+
+**Purpose:** Deferred rendering optimization
+- Collect draw calls during scene traversal
+- Sort and batch by material/shader to minimize state changes
+- Render in optimized order
+
+## Subsystem Initialization Sequence
+
+### Unknown Init Functions in `InitEngineObjects`
+
+**After Locale setup** (`thunk_FUN_00eb87ba`):
+- **Likely:** Language resource loading or string table initialization
+- **Possible:** Font system initialization for localized text
+
+**After FMV setup** (`thunk_FUN_00eb88b2`):
+- **Likely:** Video codec initialization (Bink/Smacker decoder)
+- Called after `nofmv` flag check → only runs if video enabled
+
+**Final init** (`FUN_006677c0`):
+- **Likely:** Shader compiler init or render state setup
+- **Possible:** Texture manager initialization
+- Position at end suggests finalizing dependencies after all subsystems allocated
+
+### GameServices and TimeManager Factory (`FUN_0060b740`)
+
+Called in `FinalizeDeviceSetup` after message handler registration.
+
+**Creates two singletons:**
+1. `DAT_00bef6c8` = `GameServices::Open` (1 byte)
+   - **Likely:** Service locator or dependency injection container
+   - Provides access to engine services for game code
+   
+2. `DAT_00bef768` = `TimeManager::Instance` (8 bytes)
+   - Game time management with pause control (see above)
+
+**Timing:** Created as final dependencies after core engine init complete
+
+## Render Dispatch Table
+
+**Global:** `DAT_00c8c580` (`g_pRenderDispatchTable`)
+
+**Double indirection:** `**DAT_00c8c580` suggests vtable-like structure
+
+**Usage:**
+- `InitCLIAndTimingAndDevice`: `(*(*DAT_00c8c580))(0, 0)` — Initialize(int, int)
+- `FinalizeDeviceSetup`: `(*(*DAT_00c8c580 + 8))()` — Finalize()
+
+**Likely vtable:**
+```
+[0x00] = Initialize(int, int)
+[0x08] = Finalize()
+[0x10] = BeginFrame()
+[0x18] = EndFrame()
+// etc.
+```
+
+**Purpose:** Render subsystem interface providing lifecycle and per-frame operations
+
+## Architecture Pattern Summary
+
+### Initialization Hierarchy
+```
+1. Callback Manager (DAT_00e6e870) — Core event dispatch
+2. Engine Object (DAT_00bef6d0) — Central coordinator factory
+3. Subsystem Singletons — RealGraphSystem, RealInputSystem, Locale, FMV, etc.
+4. Message Dispatch — String-based polymorphic event system
+5. Frame Callbacks — Double-buffered timing with primary/secondary callbacks
+6. Service Layer — GameServices::Open, TimeManager::Instance
+```
+
+### Key Design Patterns
+- **Factory Pattern:** Callback manager provides object creation
+- **Observer Pattern:** Message dispatch with string-based registration
+- **Command Pattern:** Deferred render queue
+- **Template Method:** Frame callbacks with pre/post hooks
+- **Strategy Pattern:** Scene-based render mode switching
+- **Singleton Pattern:** Subsystem managers (TimeManager, GameServices)
+
+### Subsystem Coordination
+The engine uses a **hybrid event-driven and polling architecture:**
+- **Event-driven:** Message dispatch for lifecycle events
+- **Polling:** Frame callbacks for continuous updates
+- **Deferred:** Render queue for batched operations
+- **Async:** Audio command queue with status polling
+
+This combination allows:
+- Responsive event handling (input, lifecycle)
+- Predictable frame timing (polling loop)
+- Optimized rendering (batching)
+- Non-blocking I/O (async audio)
