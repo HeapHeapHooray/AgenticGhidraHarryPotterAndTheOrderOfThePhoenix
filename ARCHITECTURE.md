@@ -1,231 +1,333 @@
 # Architecture of hp.exe
 
 ## Overview
-`hp.exe` is the main executable for "Harry Potter and the Order of the Phoenix". It is a Windows PE application built using Visual Studio 2005 that uses DirectX 9 for rendering.
+`hp.exe` is the main executable for "Harry Potter and the Order of the Phoenix". It is a Windows PE application built with Visual Studio 2005 using DirectX 9 for rendering and DirectInput 8 for input.
 
 ## Entry Point
-The program starts at `___tmainCRTStartup` (`006f54d2`), which is the standard CRT entry point for a Windows application. It performs runtime initialization and calls the `WinMain` function.
+The program starts at `___tmainCRTStartup` (`006f54d2`), the standard CRT entry for a Windows app, which calls `WinMain`.
 
 ## WinMain (`0060dfa0`)
-The `WinMain` function is the core entry point for the game logic. Its primary responsibilities include:
+Core entry point for all game logic. Initialization order:
 
-1.  **FPU Configuration**: Sets FPU control word using `_control87(0x20000, 0x30000)` to prevent denormal exceptions
-2.  **System Parameters Management**:
-    - Saves current Windows system parameters (mouse acceleration, screen reader settings)
-    - Disables mouse acceleration for optimal gaming performance
-    - Uses `SaveOrRestoreSystemParameters` (`0060deb0`) for this purpose
-3.  **Single Instance Check**: Uses `FindWindowA` to search for a window with the class name `OrderOfThePhoenixMainWndClass`. If an instance is already running, the new process terminates.
-4.  **Window Class Registration**: Calls `RegisterWindowClass` (`00eb4b95`) to register `OrderOfThePhoenixMainWndClass`
-5.  **Settings Loading**: Loads game settings from Windows Registry via `ReadRegistrySetting` (`0060ce60`):
-    - Resolution: `Width`, `ModeXWidth`, etc.
-    - Graphics: `BitDepth`, `ShadowLOD`, `MaxFarClip`, `ParticleRate`
-    - Registry path: `HKEY_CURRENT_USER\Software\Electronic Arts\Harry Potter and the Order of the Phoenix\GameSettings`
-    - Falls back to `HKEY_LOCAL_MACHINE` if HKCU doesn't exist
-6.  **Window Creation**: Calls `CreateGameWindow` (`0060db20`) to create the main game window
-7.  **Graphics Initialization**: Initializes DirectX 9 rendering system
-8.  **Main Loop**: Enters `MainGameLoop` (`0060dc10`) which handles window messages and game updates
-9.  **Cleanup and Termination**: Restores system parameters and terminates
+1. **FPU Configuration**: `_control87(0x20000, 0x30000)` — prevents denormal floating-point exceptions
+2. **System Parameters**: Saves current Windows parameters (`SPI_GETMOUSESPEED`, `SPI_GETMOUSE`, `SPI_GETSCREENREADER`) into globals `DAT_008afc44`, `DAT_008afc4c`, `DAT_008afc54`, then calls `UpdateSystemParameters(0)` to disable mouse acceleration
+3. **Command Line Storage**: `strncpy` of `lpCmdLine` into `DAT_00c82b88` (0x1ff bytes) and `DAT_00c82d88` (0x1ff bytes)
+4. **COM/Thread Init**: `thunk_FUN_00eb787a()` — likely CoInitialize or thread pool setup
+5. **Single Instance Check**: `FindWindowA("OrderOfThePhoenixMainWndClass", NULL)` — if found, calls `TerminateProcess(GetCurrentProcess(), 0)`
+6. **Window Class Registration**: `RegisterWindowClass()` (`00eb4b95`)
+7. **Registry Settings Load**: Reads all game settings (see section below)
+8. **Command Line Parsing**: `ParseCommandLineArg` checks for `fullscreen` and `widescreen` flags
+9. **Window Creation**: `CreateGameWindow(hInstance, width, height)` → stored in `DAT_00bef6cc`
+10. **Subsystem Init**: `thunk_FUN_00eb5c3e()`, `thunk_FUN_00eb612e()`, `thunk_FUN_00eb496e()` — likely DirectX + DirectInput initialization
+11. **Window Placement Restore**: In windowed mode, reads `Maximized`/`Minimized`/placement from registry and calls `ShowWindow` accordingly
+12. **Main Loop**: `MainLoop()` (`0060dc10`)
+13. **Cleanup**: `thunk_FUN_00ec6610()` (render teardown), `UnacquireInputDevices()`, `UpdateSystemParameters(1)`, `TerminateProcess` (hard exit)
 
-## System Parameters Management (`0060deb0`)
-This function saves or restores Windows system settings:
-- **param_1 = 0**: Save current parameters and disable mouse acceleration
-- **param_1 = 1**: Restore original parameters
+On initialization failure: `TerminateProcess(GetCurrentProcess(), 0)`.
 
-Modified system parameters:
-- `SPI_SETMOUSESPEED` (0x3a/0x3b): Mouse speed
-- `SPI_SETMOUSE` (0x34/0x35): Mouse acceleration curves
-- `SPI_SETSCREENREADER` (0x32/0x33): Screen reader flags
+## Registry Settings (`0060ce60` for int, `0060ca20` for string)
 
-The game clears bit 0 and bits 2-3 of the flags to disable acceleration.
+All settings under `HKEY_CURRENT_USER\Software\Electronic Arts\Harry Potter and the Order of the Phoenix\GameSettings`:
 
-## Registry Settings (`0060ce60`)
-Reads game configuration from the Windows Registry:
-- Constructs path: `Software\Electronic Arts\<app_name>\<section>`
-- Searches `HKEY_CURRENT_USER` first, then `HKEY_LOCAL_MACHINE`
-- Creates key in HKCU with default value if neither location exists
-- Returns integer value or provided default
+### Graphics Settings
+| Key | Address | Default | Notes |
+|-----|---------|---------|-------|
+| `Width` | `DAT_00bf1940` | 0 | Non-zero = fullscreen, value = width |
+| `BitDepth` | `DAT_00bf1944` | 0 | Color depth (16/32) |
+| `ShadowLOD` | `DAT_00bf1948` | 6 | Shadow quality level |
+| `MaxTextureSize` | `DAT_00bf194c` | 0 | Max texture dimension |
+| `MaxShadowTextureSize` | `DAT_00bf1950` | 0 | Max shadow texture dimension |
+| `MaxFarClip` | `DAT_00bf1954` | 0 | Far clip distance |
+| `CullDistance` | `DAT_00bf195c` | 0 | Object culling distance |
+| `ParticleRate` | `DAT_00bf1958` | 0 | Particle density |
+| `ParticleCullDistance` | `DAT_00bf1960` | 0 | Distance to stop drawing particles |
+| `DisableFog` | `DAT_00bf1964` | 0 | Disable fog rendering |
+| `DisablePostPro` | `DAT_00bf1968` | 0 | Disable post-processing |
+| `FilterFlip` | `DAT_00bf196c` | 0 | Texture filter type |
+| `AAMode` | `DAT_00bf1970` | 0 | Anti-aliasing quality (0=off) |
+| `UseAdditionalModes` | `DAT_00bf1974` | 0 | Enable additional video modes |
+| `OptionResolution` | `DAT_00bf197c` | 0 | Selected resolution option index |
+| `OptionLOD` | `DAT_008ae1ec` | 1 | Level of detail option |
+| `OptionBrightness` | `DAT_008ae1f0` | 5 | Brightness setting |
+| `Mode0..5Width` | `DAT_009a78a0[6]` | 0 | Custom mode widths (6 entries) |
+| `Mode0..5Height` | `DAT_009e4c90[6]` | 0 | Custom mode heights (6 entries) |
+
+### Window Placement (windowed mode only, string values)
+| Key | Default | Notes |
+|-----|---------|-------|
+| `PosX` | `"300"` | Window X position |
+| `PosY` | `"32"` | Window Y position |
+| `SizeX` | `"640"` | Window width |
+| `SizeY` | `"480"` | Window height |
+| `Maximized` | `"false"` | Whether window is maximized |
+| `Minimized` | `"false"` | Whether window is minimized |
+
+### Fallback
+- Reads HKCU first, then HKLM. If key is not found anywhere, creates it in HKCU with the default value.
+- `ReadRegistrySetting` uses `std::basic_string` internally. Throws C++ exception if section name is empty.
+
+## Command Line Parsing (`ParseCommandLineArg` `00617bf0`)
+Parses named flags from the saved command line (`DAT_00c82b88`):
+- `fullscreen` — sets `DAT_008afbd9=1` (fullscreen mode), optionally reads a width value
+- `widescreen` — sets `DAT_008ae1dc` to a widescreen aspect ratio constant (`DAT_008b6a84`; default is `DAT_007d52fc`)
+
+Height is calculated as `ROUND(width / aspectRatio)` when fullscreen width is specified.
+
+## System Parameters Management (`UpdateSystemParameters` `0060deb0`)
+- **param_1 = 0** (disable): reads flags and clears bits 0 and 2-3 if bit 0 was already clear
+- **param_1 = 1** (restore): writes back saved values from `DAT_008afc44/4c/54`
+
+Modified parameters:
+- `SPI_SETMOUSESPEED` (0x3b): mouse speed
+- `SPI_SETMOUSE` (0x35): mouse acceleration
+- `SPI_SETSCREENREADER` (0x33): screen reader flags
+
+Flags storage: `DAT_008afc44` (mouseSpeed[2]), `DAT_008afc4c` (mouseAccel[2]), `DAT_008afc54` (screenReader[6])
 
 ## Window Management
 
 ### Window Class Registration (`00eb4b95`)
-Registers the main window class with properties:
-- Class name: `OrderOfThePhoenixMainWndClass`
+- Class: `OrderOfThePhoenixMainWndClass`
 - Style: `CS_DBLCLKS | CS_OWNDC | CS_VREDRAW | CS_HREDRAW`
-- Background: Black brush
-- Cursor: Arrow
-- First calls `UnregisterClassA` to handle crashed previous instances
+- Background: black brush; cursor: arrow
+- Calls `UnregisterClassA` first to handle crashed instances
 
-### Window Creation (`0060db20`)
-Creates the main game window:
-- Uses global settings for width/height and fullscreen mode
-- Window styles:
-  - Fullscreen: `WS_POPUP` (no borders)
-  - Windowed: `WS_OVERLAPPEDWINDOW` (standard window)
-- Calls `AdjustWindowRectEx` to account for borders
+### Window Creation (`CreateGameWindow` `0060db20`)
+**Fullscreen:**
+- Style: `WS_POPUP` (`0x80000000`)
+- `SetWindowPos` with `HWND_TOPMOST` — always on top
+- `SetMenu(hWnd, NULL)` — removes menu bar
+- `SetThreadExecutionState(0x80000002)` — prevents sleep/screensaver (ES_CONTINUOUS | ES_DISPLAY_REQUIRED)
 
-### Window Procedure (`0060d6d0`)
-Handles window messages with special fullscreen behavior:
+**Windowed:**
+- Style: `WS_OVERLAPPEDWINDOW` (`0xcf0000`)
+- Position from registry (default 300, 32)
+- Size from registry (default 640×480)
 
-**Key messages:**
-- `WM_DESTROY` (0x02): Shows cursor and posts quit message
-- `WM_ACTIVATE` (0x06): Handles focus changes
-  - Deactivate: Shows cursor, pauses game, sets 2000ms delay timer
-  - Activate: Hides cursor, resumes game
-- `WM_SETFOCUS`/`WM_SETCURSOR` (0x07/0x20): Manages cursor visibility
-- `WM_PAINT` (0x0f): Different handling for fullscreen (ValidateRect) vs windowed (BeginPaint/EndPaint)
-- `WM_CLOSE` (0x10): Calls cleanup before destroying window
-- `WM_SYSCOMMAND` (0x112): Blocks system commands in fullscreen:
-  - `SC_MAXIMIZE`, `SC_SIZE`, `SC_MOVE`, `SC_KEYMENU` are blocked
-- `WM_NCHITTEST` (0x84): Returns `HTCLIENT` in fullscreen
-- `WM_ENTERMENULOOP` (0x120): Returns non-zero in fullscreen
+### Window Procedure (`WindowProc` `0060d6d0`)
+**All messages handled:**
+- `WM_DESTROY (0x02)`: show cursor if fullscreen, `PostQuitMessage(0)`
+- `WM_SIZE (0x05)`: return 0
+- `WM_ERASEBKGND (0x14)`: return 0
+- `WM_ACTIVATEAPP (0x1c)`: return 0
+- `WM_ACTIVATE (0x06)`: complex focus management (see below)
+- `WM_SETFOCUS/WM_SETCURSOR (0x07/0x20)`: cursor visibility; on losing focus calls `PauseGraphicsState()`
+- `WM_PAINT (0x0f)`: fullscreen → `ValidateRect`; windowed → `BeginPaint/EndPaint`
+- `WM_CLOSE (0x10)`: windowed only → `SaveWindowPlacement()` then `DestroyWindow`
+- `WM_SYSCOMMAND (0x112)`: fullscreen blocks SC_MAXIMIZE, SC_SIZE, SC_MOVE, SC_KEYMENU
+- `WM_NCHITTEST (0x84)`: fullscreen → `HTCLIENT`
+- `WM_ENTERMENULOOP (0x120)`: fullscreen → return `0x10000`
+- `WM_WTSSESSION_CHANGE (0x218)`: session connect(0) or lock(7) → return 1; else → return -1
 
-**Global flags:**
-- `DAT_008afbd9`: Fullscreen mode flag
-- `DAT_00bef6c7`: Window has focus flag
-- `DAT_00bef6d8`: Delayed operation timer (2000ms on deactivate)
+**Focus Loss (WM_ACTIVATE, wParam==0, fullscreen):**
+1. `PauseGraphicsState()` (`FUN_00617b60`)
+2. `UnacquireInputDevices()`
+3. `ShowCursor` loop until ≥ 1
+4. `DAT_00bef6c7 = 1` (has-focus flag set to "lost focus")
+5. `thunk_FUN_00ea53ca()` — likely render pause
+6. If delayed-op timer is 0 (not already pending):
+   - If audio state allows: `PauseAudio()` (`FUN_0061ef80`), set `DAT_00bef6d4`
+   - If game update state allows: `PauseGameUpdates(0)` (`FUN_0058b790`), set `DAT_00bef6d5`
+7. `DAT_00bef6d8 = 0` (reset delayed timer)
 
-## Main Game Loop (`0060dc10`)
+**Focus Gain (WM_ACTIVATE, wParam≠0, fullscreen):**
+1. Via game object at `DAT_00e6b384+0xc`: calls vtable method to get input device and acquires it
+2. `AcquireInputDevices()`
+3. `ShowCursor` loop until < 0
+4. `thunk_FUN_00ea53ca()`
+5. `DAT_00bef6c7 = 0`
+6. `DAT_00bef6d8 = 2000` (2-second delay before re-enabling updates)
 
-The main game loop runs continuously until `WM_QUIT` is received:
+### Window Placement Save (`SaveWindowPlacement` `0060d220`)
+Saves position/state via `WriteRegistrySetting` (`0060c670`) on WM_CLOSE.
 
-### Loop Structure:
-1. **DirectX Device Management**: Calls `UpdateDirectXDevice` (`0067d310`)
-2. **Focus State Handling**:
-   - When focus lost (`DAT_00bef6c7`): Shows cursor, pauses rendering
-   - When focus regained: Hides cursor, resumes rendering
-3. **Message Processing**: Uses `PeekMessageA` to process Windows messages
-4. **Game Update** (when no messages):
-   - Calculates frame delta time using `GetTickCount`
-   - Updates game state
-   - Implements frame rate limiting with `Sleep(0)`
-5. **Delayed Operations**: Manages `DAT_00bef6d8` timer for deferred tasks
+## Main Game Loop (`MainLoop` `0060dc10`)
+Runs until `WM_QUIT` received or `DAT_00bef6c5` exit flag is set.
 
-### Global State Variables:
-- `DAT_00bef6c5`: Exit request flag
-- `DAT_008afbd9`: Fullscreen mode
-- `DAT_00bef6c7`: Window has focus
-- `DAT_00bef67e`: Cursor visibility state
-- `DAT_00bef67c`, `DAT_00bef67d`: Additional state flags
-- `DAT_00bef6d8`: Delayed operation timer (milliseconds)
-- `DAT_00bef6d7`: Game update enable flag
-- `DAT_00c83188`: Frame timing data
+**Per-iteration sequence:**
+1. `UpdateDirectXDevice()` — check/recover D3D device
+2. **Focus state** (fullscreen only):
+   - No focus + cursor state changed (`DAT_00bef67e`): calls `SwitchRenderOutputMode` with scene IDs from `DAT_00c82b00/08/ac`
+   - Has focus but flag says "lost": `UnacquireInputDevices()`, show cursor, `SwitchRenderOutputMode`
+3. `PeekMessageA` (PM_REMOVE) — if `WM_QUIT (0x12)`: return `wParam`
+4. No messages:
+   - Compute frame budget: `uStack_44 = ROUND((accumHigh * k1 + accumLow) * k2 * k3)` using constants at `DAT_008475d8`, `DAT_00845594`, `DAT_00845320`
+   - `GameFrameUpdate()`
+   - If `DAT_00bef6d7` (game update enabled): lazy-init `FUN_00612f00()` with atexit cleanup; call `thunk_FUN_00eb6dbc()` and track min in `DAT_008afb08`
+   - Manage `DAT_00bef6d8` delayed-op countdown; on expiry: optionally `thunk_FUN_00ec67e8()` (resume audio) and `ResumeGameUpdates()` (`FUN_0058b8a0`)
+   - Frame rate cap: if frame took < budget, `Sleep(0)`
 
-## DirectX Device Management (`0067d310`)
+## Timing System
 
-Monitors and maintains DirectX 9 device state:
+### GetGameTime (`00618010`)
+High-resolution timer using Windows multimedia API:
+```
+timeGetDevCaps(caps, 8)
+timeBeginPeriod(caps.wPeriodMin)
+t = timeGetTime()
+timeEndPeriod(caps.wPeriodMin)
+```
+- First call captures `_DAT_00e6e5e8` (startup base time)
+- Returns `t - startupBase` — milliseconds since game start
+- `DAT_00e6b388`: one-time init flag
 
-### Device Lost Handling:
-- Checks device state via `IDirect3DDevice9::TestCooperativeLevel`
-- Handles error codes:
-  - `D3DERR_DEVICELOST` (0x88760868): Device lost, sleep 50ms and retry
-  - `D3DERR_DEVICENOTRESET` (0x88760869): Device ready for reset
+### GameFrameUpdate (`00618140`)
+64-bit fixed-point timing:
+1. `ProcessDeferredCallbacks()` — run deferred callback queue (2ms budget)
+2. `GetGameTime()` → convert to 16.16 fixed point: `high = t >> 16`, `low = t << 16`
+3. Init on first call: `DAT_00e6e5e0/e4 = (low, high)`
+4. Delta = `(low, high) - (DAT_00e6e5e0, DAT_00e6e5e4)`, capped at `0x640000` (100ms)
+5. Accumulate: `(DAT_00c83198, DAT_00c8319c) += delta`
+6. `DAT_00c83110 = ((accum * 3) / 0x10000)` — game ticks (3x speed)
+7. If accumulated time ≥ next callback time (`DAT_00c831a8/ac`):
+   - Advance callback time by interval (`DAT_00c83190/94`)
+   - Toggle `DAT_008e1648` (frame flip index)
+   - Store current timing in double-buffer at `DAT_00c83170+flip*8`
+   - Call `UpdateFrameTimingPrimary(&local_4)` and `(*DAT_008e1644[0])(&local_4)`
+8. Check secondary callback buffer, call `InterpolateFrameTime` and `(*DAT_008e1644[1])()`
 
-### Recovery Process:
-1. Release DirectX resources (calls `ReleaseDirectXResources` `0067cfb0`)
-2. Call `IDirect3DDevice9::Reset` with saved parameters
-3. Restore DirectX resources (calls `RestoreDirectXResources` `0067d0c0`)
+### Key timing globals
+| Address | Name | Purpose |
+|---------|------|---------|
+| `DAT_00e6e5e0/e4` | last frame time | 64-bit microseconds (16.16 fixed) |
+| `DAT_00c83198/9c` | accumulated time | 64-bit |
+| `DAT_00c83110` | game ticks | = accum*3/0x10000 |
+| `DAT_00c83114` | tick counter | incremented in primary callback |
+| `DAT_00c831a8/ac` | next callback time | 64-bit |
+| `DAT_00c83190/94` | callback interval | 64-bit |
+| `DAT_008e1648` | frame flip index | 0 or 1, toggled each callback |
+| `DAT_00c83170` | timing double-buffer | 2×8 bytes |
+| `DAT_008e1644` | callback table ptr | function pointer array [primary, secondary] |
 
-### Global State:
-- `DAT_00bf1920`: Pointer to IDirect3DDevice9 interface
-- `DAT_00bf18aa`: Device lost flag
+### Deferred Callback Queue (`ProcessDeferredCallbacks` `00636830`)
+Linked list at `DAT_00bef7c0`. Each node has next pointer at `+0x7c`.
+- Per frame: processes as many nodes as possible within 2ms
+- `FUN_0063d600(node)` returns 1 when the node's work is done; node is then removed
 
-### Resource Management
+## DirectX Device Management
 
-**ReleaseDirectXResources (`0067cfb0`):**
-Releases DirectX resources before device reset:
-- `DAT_00b95034`: Unknown DirectX interface
-- `DAT_00bf1934`: Render target or texture surface
-- `DAT_00bf1930`: Back buffer surface
-- `DAT_00bf1938`: Additional render target
-- Clears cached surface pointers: `DAT_00af1390`, `DAT_00ae9250`
+### UpdateDirectXDevice (`DirectX_UpdateDevice` `0067d310`)
+1. Calls `PreDeviceCheck()` (`FUN_0067d2e0`)
+2. `IDirect3DDevice9::TestCooperativeLevel` (vtable +0xc)
+3. On `D3DERR_DEVICELOST (-0x7789f798)`: sets `DAT_00bf18aa=1`, sleeps 50ms
+4. On `D3DERR_DEVICENOTRESET (-0x7789f797)`: calls `ReleaseDirectXResources()`, then `Reset(&DAT_00b94af8)`, then `RestoreDirectXResources()`
+5. On unexpected error code: calls `FatalError("Invalid device lost state %d\n", hr)` — does not return
+6. On success: `DAT_00bf18aa = 0`
 
-**RestoreDirectXResources (`0067d0c0`):**
-Restores DirectX resources after device reset:
-1. Calls initialization functions
-2. Gets back buffer from device (`GetBackBuffer`)
-3. Gets surface description from back buffer
-4. Creates render target texture (`IDirect3DDevice9::CreateTexture`)
-5. Gets surface from texture (`GetSurfaceLevel`)
-6. Sets render targets (`IDirect3DDevice9::SetRenderTarget`)
-7. Performs final initialization
+### ReleaseDirectXResources (`0067cfb0`)
+1. Release `DAT_00b95034` (GPU sync query) if non-null
+2. `thunk_FUN_00ec04dc()` — unknown pre-release cleanup
+3. Clear `DAT_00af1390`, `DAT_00ae9250` (cached surface pointers)
+4. If `DAT_00bf1934 != NULL && DAT_00bf1934 != 0xbacb0ffe`:
+   - Get back buffer from `DAT_00bf1924` (via vtable +0x14)
+   - `FUN_0067ecf0(local_c, 0)`
+   - Release surface `local_c`
+   - Release `DAT_00bf1934`
+5. Release `DAT_00bf1930` (back buffer) if non-null
+6. Release `DAT_00bf1938` (additional render target) if non-null
+7. `thunk_FUN_00ec19b5()` — post-release cleanup
 
-## Game Frame Update (`00618140`)
+### RestoreDirectXResources (`0067d0c0`)
+1. `InitRenderStates()` (`FUN_00675950`)
+2. If `DAT_00b95034 == NULL`: `CreateGPUSyncQuery()` (`FUN_0067b820`)
+3. `FUN_0067bb20()` — (empty stub in current analysis)
+4. Get back buffer via `DAT_00bf1924` vtable +0x14 → `DAT_00bf1930`; cache in `DAT_00af1390`
+5. Get back buffer surface description
+6. `CreateTexture` (vtable +0x74) for additional render target → `DAT_00bf1938`
+7. If `DAT_00bf1970 == 0` (AAMode == off) and HW supports it:
+   - `CreateTexture` (vtable +0x5c) with same dimensions → `local_28`
+   - Release old `DAT_00bf1930`, get `GetSurfaceLevel(0)` → `DAT_00af1390`
+   - `DAT_00bf1934 = local_28`; `DAT_00bf1930 = DAT_00af1390`
+8. Else: `DAT_00bf1934 = 0xbacb0ffe` (sentinel - AA path, no extra surface)
+9. `DAT_00ae9250 = DAT_00bf1938`
+10. `SetRenderTarget(0, DAT_00af1390)` and secondary render target
+11. `InitD3DStateDefaults()` (`FUN_00674430`)
 
-The main game update function with sophisticated frame timing:
+### DirectX resource globals
+| Address | Purpose |
+|---------|---------|
+| `DAT_00bf1920` | `IDirect3DDevice9*` |
+| `DAT_00bf1924` | `IDirect3D9*` or swap chain object |
+| `DAT_00bf1930` | Back buffer `IDirect3DSurface9*` |
+| `DAT_00bf1934` | Render target texture or `0xbacb0ffe` sentinel |
+| `DAT_00bf1938` | Additional render target `IDirect3DSurface9*` |
+| `DAT_00af1390` | Cached render-to surface |
+| `DAT_00ae9250` | Cached secondary render target |
+| `DAT_00b95034` | GPU sync query object (event query) |
+| `DAT_00bf18aa` | Device-lost flag |
+| `DAT_00bf1970` | AAMode (0 = AA path active) |
+| `DAT_00b94af8` | Saved `D3DPRESENT_PARAMETERS` for Reset |
 
-### Timing System:
-- Gets current time from `FUN_00618010()`
-- Calculates delta time since last frame
-- **Delta cap**: 100ms maximum to prevent "spiral of death" when game hitches
-- Accumulates delta time in 64-bit counters
-- **Game speed**: Multiplies accumulated time by 3x for game logic
-- Triggers callbacks when timing thresholds are met
+### D3D State Defaults (`InitD3DStateDefaults` `00674430`)
+Initializes large arrays of render state, sampler state, and texture stage state defaults.
+Conditionally adjusts blend states for hardware that lacks certain texture operation capabilities (`D3DTEXTURECAPS`).
+Also sets: fog state defaults (`_DAT_00d7ea68=5`), clears `DAT_008d3878` sentinel area with `0xcd`.
 
-### Global Timing Variables:
-- `DAT_00e6e5e0`, `DAT_00e6e5e4`: Last frame time (64-bit microseconds)
-- `DAT_00c83198`, `DAT_00c8319c`: Accumulated game time (64-bit)
-- `DAT_00c831a8`, `DAT_00c831ac`: Next callback time (64-bit)
-- `DAT_00c83190`, `DAT_00c83194`: Callback interval (64-bit)
-- `DAT_008e1648`: Frame flip/toggle flag for double buffering callbacks
-
-### Frame Callbacks:
-- `FUN_00617f50`: Primary frame callback
-- `FUN_00617ee0`: Secondary frame callback
-- `DAT_008e1644`: Function pointer table for callbacks
+### GPU Sync Query (`CreateGPUSyncQuery` `0067b820`)
+Creates a `D3DQUERYTYPE_EVENT` query (vtable offset 0xe0 on device).
+Stored in `DAT_00b95034`. Used for GPU-CPU synchronization.
+The `swap effect` flag (`DAT_008ae1fc`) selects between DISCARD (2) and COPY (0) queries.
 
 ## DirectInput Management
 
-The game uses DirectInput for keyboard, mouse, and joystick input.
+### Input Devices
+- `DAT_00e6a070`: `IDirectInputDevice8*` keyboard
+- `DAT_00e6a194`: `IDirectInputDevice8*` mouse
+- `DAT_00e6a42c`: first joystick entry; stride = 0x248 bytes; 2 joysticks
 
-### Input Devices:
-- **Keyboard**: `DAT_00e6a070` (IDirectInputDevice8*)
-- **Mouse**: `DAT_00e6a194` (IDirectInputDevice8*)
-- **Joysticks**: Array at `DAT_00e6a42c`, supports 2 joysticks (stride 0x248 bytes each)
+### AcquireInputDevices (`0068da30`) / UnacquireInputDevices (`0068dac0`)
+Acquire/unacquire all devices when gaining/losing focus.
+Fatal error via `FUN_0066f810` if any device fails.
+Also calls `Ordinal_5(1/0)` — custom cursor show/hide.
 
-### Acquire/Unacquire on Focus Changes:
+## Game State and Audio
 
-**UnacquireInputDevices (`0068dac0`)** - Called when losing focus:
-1. Unacquires keyboard (`IDirectInputDevice8::Unacquire`)
-2. Unacquires mouse
-3. Calls `Ordinal_5(0)` - likely `ShowCursor(TRUE)`
-4. Unacquires both joysticks
-5. Fatal error if any unacquire fails
+### Pause/Resume System
+- **Focus loss**: `PauseAudio()` (`FUN_0061ef80`) + `PauseGameUpdates(0)` (`FUN_0058b790`)
+- **Resume**: triggered by `DAT_00bef6d8` expiry:
+  - `thunk_FUN_00ec67e8()` resumes audio
+  - `ResumeGameUpdates()` (`FUN_0058b8a0`) resumes physics/updates
 
-**AcquireInputDevices (`0068da30`)** - Called when gaining focus:
-1. Acquires keyboard (`IDirectInputDevice8::Acquire`)
-2. Acquires mouse
-3. Calls `Ordinal_5(1)` - likely `ShowCursor(FALSE)`
-4. Acquires both joysticks
-5. Fatal error if any acquire fails
+### Global State Flags
+| Address | Name | Purpose |
+|---------|------|---------|
+| `DAT_00bef6c5` | exit flag | Non-zero = exit MainLoop |
+| `DAT_008afbd9` | fullscreen | Boolean fullscreen mode |
+| `DAT_00bef6c7` | focus lost | 1 = window does not have focus |
+| `DAT_00bef67e` | cursor state | Current cursor visibility state |
+| `DAT_00bef67c` | unknown | Checked in focus-loss cursor path |
+| `DAT_00bef67d` | unknown | Checked in focus-loss cursor path |
+| `DAT_00bef6d8` | delayed op timer | ms countdown; expires → resume audio/updates |
+| `DAT_00bef6d7` | update enabled | Game update sub-system enabled flag |
+| `DAT_00bef6d4` | audio paused | Audio was paused on focus loss |
+| `DAT_00bef6d5` | updates paused | Physics/updates paused on focus loss |
+| `DAT_00c82b08` | scene ID | Checked against DAT_00c82ac8 in render mode switch |
+| `DAT_00c82b00` | scene ID 2 | Alternate scene ID for render mode switch |
+| `DAT_00c82ac8` | target scene | Target scene ID for SwitchRenderOutputMode |
+| `DAT_00e6b384` | game state obj | Main game-state object pointer |
+| `DAT_00c7b908` | pause state | State check before PauseGameUpdates |
+| `DAT_008afb08` | min memory | Minimum available video memory across frames |
+| `DAT_00bf192c` | fullscreen flag 2 | Set to 1 in fullscreen path |
+| `DAT_00bef6cc` | window handle | Main HWND (duplicate of ghWnd?) |
+| `DAT_00bef6d0` | COM object | Created via vtable in WinMain, released on exit |
 
-## Window Position Persistence
+## Frame Rendering
 
-### SaveWindowPlacement (`0060d220`)
-Saves window position and state to registry on close:
+### Double-Buffer Callback System
+The timing system uses a double buffer (flip index `DAT_008e1648`) to smoothly pass timing data to callbacks:
+- `UpdateFrameTimingPrimary` stores tick/time in `DAT_00c83128/c83120` indexed by flip
+- `InterpolateFrameTime` reads from the opposite buffer to interpolate between two frames
+- Callback table at `DAT_008e1644`: `[0]` = primary callback, `[1]` = secondary callback
 
-**Saved settings (in GameSettings section):**
-- `PosX`: Window X position (adjusted for borders)
-- `PosY`: Window Y position (adjusted for borders)
-- `SizeX`: Window width (adjusted for borders)
-- `SizeY`: Window height (adjusted for borders)
-- `Minimized`: "true"/"false" (SW_SHOWMINIMIZED state)
-- `Maximized`: "true"/"false" (SW_SHOWMAXIMIZED state)
-
-Process:
-1. Calls `GetWindowPlacement` to get current window state
-2. Adjusts rect using `AdjustWindowRect` with style `0xcf0000`
-3. Calls `WriteRegistrySetting` (`0060c670`) to save each value
-
-### WriteRegistrySetting (`0060c670`)
-Writes string values to registry:
-- Path: `HKEY_CURRENT_USER\Software\Electronic Arts\<app>\<section>`
-- Creates registry key if it doesn't exist
-- Counterpart to `ReadRegistrySetting`
+### Render Output Modes (`SwitchRenderOutputMode` `00612530`)
+Called on focus transitions to change the rendering mode/scene.
+Uses scene IDs `DAT_00c82b00/08` compared against target `DAT_00c82ac8`.
 
 ## Key Components
--   **Window Management**: Standard Win32 API with fullscreen/windowed mode support, position/size persistence
--   **Configuration**: Registry-based settings with HKCU/HKLM fallback, automatic key creation
--   **Rendering**: DirectX 9 with device lost recovery and multiple render targets
--   **Input**: DirectInput for keyboard/mouse/joystick, acquire/unacquire on focus changes, mouse acceleration disabled
--   **Timing**: Sophisticated frame timing with 100ms delta cap, 3x game speed multiplier, double-buffered callbacks
--   **Message Loop**: Integrated with game update loop and frame limiting
+- **Window Management**: Full Win32 with fullscreen/windowed, placement persistence, session change handling
+- **Configuration**: Registry (HKCU/HKLM fallback) with extensive settings, command-line override
+- **Rendering**: DirectX 9, device lost recovery, dual render targets, GPU sync query, D3D state tables
+- **Input**: DirectInput 8, keyboard/mouse/2 joysticks, acquire/unacquire on focus change
+- **Timing**: High-resolution multimedia timer, 16.16 fixed point, 3× game speed multiplier, double-buffered callbacks
+- **Audio**: Pause on focus loss, 2-second delayed resume
+- **Message Loop**: Integrated with game update, frame limiter, deferred callback queue
